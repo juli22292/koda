@@ -63,7 +63,7 @@ const server = http.createServer(async (req, res) => {
     app = await electron.launch({ executablePath: path.resolve(process.env.KODA_TEST_EXE || 'release/win-unpacked/Koda.exe'), args: [], env })
     page = await app.firstWindow(); page.setDefaultTimeout(30000)
     page.on('pageerror', error => errors.push(error.message))
-    await page.getByRole('heading', { name: 'Was bauen wir heute?' }).waitFor()
+    await page.locator('.welcome h1').waitFor()
     await app.evaluate(async ({ app }, { url, configPath, directory }) => {
       const updater = process.mainModule.require('electron-updater').autoUpdater
       updater.updateConfigPath = configPath
@@ -102,7 +102,7 @@ const server = http.createServer(async (req, res) => {
 
     await page.evaluate(async url => { await window.koda.saveProvider('custom', { model: 'test', baseURL: `${url}/v1` }); await window.koda.saveSettings({ theme: 'dark' }) }, url)
     await page.reload()
-    await page.getByRole('heading', { name: 'Was bauen wir heute?' }).waitFor()
+    await page.locator('.welcome h1').waitFor()
     await page.getByRole('textbox', { name: 'Nachricht an Koda' }).fill('Laufende Testaufgabe')
     await page.getByRole('button', { name: 'Nachricht senden' }).click()
     await page.getByText('Ich arbeite noch …', { exact: true }).waitFor()

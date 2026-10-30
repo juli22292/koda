@@ -59,6 +59,49 @@ test('simultaneous checks share one provider request; offline errors can recover
   updater.checkImpl = async () => { updater.emit('update-not-available') }
   assert.equal((await manager.check()).status, 'idle')
 })
+
+test('startup checks once, then every minute; duplicate starts and disposal do not leak timers', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+  const { updater, manager } = fixture()
+  t.after(() => manager.dispose())
+  const settle = () => new Promise<void>(resolve => setImmediate(resolve))
+  manager.start(); manager.start()
+  t.mock.timers.tick(7999)
+  assert.equal(updater.checks, 0)
+  t.mock.timers.tick(1); await settle()
+  assert.equal(updater.checks, 1)
+  t.mock.timers.tick(51_999); await settle()
+  assert.equal(updater.checks, 1)
+  t.mock.timers.tick(1); await settle()
+  assert.equal(updater.checks, 2)
+  t.mock.timers.tick(60_000); await settle()
+  assert.equal(updater.checks, 3)
+  manager.dispose()
+  t.mock.timers.tick(180_000); await settle()
+  assert.equal(updater.checks, 3)
+  manager.start()
+  t.mock.timers.tick(8000); await settle()
+  assert.equal(updater.checks, 4)
+})
+
+test('available updates remain visible during a minute check and downloads wait for it', async () => {
+  const { updater, manager } = fixture()
+  updater.emit('update-available', { version: '0.3.0' })
+  let finish!: () => void
+  updater.checkImpl = () => new Promise<void>(resolve => {
+    updater.emit('checking-for-update')
+    finish = () => { updater.emit('update-available', { version: '0.3.0' }); resolve() }
+  })
+  const check = manager.check()
+  assert.equal(manager.getState().status, 'available')
+  assert.equal(manager.getState().version, '0.3.0')
+  const first = manager.download(), second = manager.download()
+  assert.equal(updater.downloads, 0)
+  finish()
+  await Promise.all([check, first, second])
+  assert.equal(updater.downloads, 1)
+  assert.equal(manager.getState().status, 'downloaded')
+})
 test('downloads require an available version and are installed only on explicit request', async () => {
   const { updater, manager } = fixture()
   await assert.rejects(manager.download(), /kein Update/)

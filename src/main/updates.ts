@@ -28,7 +28,10 @@ export class UpdateManager {
     updater.logger = null
     if (!options.enabled) return
 
-    updater.on('checking-for-update', () => this.setState({ status: 'checking' }))
+    updater.on('checking-for-update', () => {
+      // Keep an available update visible while the next background check runs.
+      if (!this.state.version) this.setState({ status: 'checking' })
+    })
     updater.on('update-available', info => {
       if (!valid(info.version) || !gt(info.version, options.currentVersion)) { this.setState({ status: 'idle' }); return }
       this.setState({ status: 'available', version: info.version })
@@ -62,11 +65,14 @@ export class UpdateManager {
     if (!this.options.enabled || this.timer || this.interval) return
     this.timer = setTimeout(() => { this.timer = undefined; void this.check() }, 8000)
     this.timer.unref?.()
-    this.interval = setInterval(() => void this.check(), 4 * 60 * 60 * 1000)
+    this.interval = setInterval(() => void this.check(), 60_000)
     this.interval.unref?.()
   }
 
-  dispose() { clearTimeout(this.timer); clearInterval(this.interval) }
+  dispose() {
+    clearTimeout(this.timer); clearInterval(this.interval)
+    this.timer = undefined; this.interval = undefined
+  }
 
   async check(): Promise<AppUpdateState> {
     if (!this.options.enabled || ['downloading', 'downloaded', 'installing'].includes(this.state.status)) return this.getState()
@@ -82,6 +88,9 @@ export class UpdateManager {
 
   async download(): Promise<AppUpdateState> {
     if (!this.options.enabled) throw new Error('Automatische Updates sind in der installierten Windows-Version verfügbar.')
+    // A minute check can already be in flight when the user clicks Download.
+    // Let it finish before transitioning into the download state.
+    if (this.checkPromise) await this.checkPromise
     if (this.downloadPromise) return this.downloadPromise
     if (this.state.status === 'downloaded') return this.getState()
     if (!this.state.version || !['available', 'error'].includes(this.state.status)) throw new Error('Es steht kein Update zum Herunterladen bereit.')

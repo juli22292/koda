@@ -7,9 +7,7 @@ const { githubRequest } = require('./github-client.cjs')
 async function publishRelease() {
   const pkg = JSON.parse(await fs.readFile(path.resolve('package.json'), 'utf8'))
   const config = pkg.build.publish
-  if (config.provider !== 'github' || config.owner !== 'juli22292' || config.repo !== 'koda-releases') throw new Error('Unerwartetes Veröffentlichungsziel. Der Quellcode darf nicht veröffentlicht werden.')
-  const source = await githubRequest('/repos/juli22292/koda')
-  if (!source.private) throw new Error('Das Quellcode-Repository ist öffentlich. Vor dem Veröffentlichen wieder auf privat stellen.')
+  if (config.provider !== 'github' || config.owner !== 'juli22292' || config.repo !== 'koda-releases') throw new Error('Installer und Update-Dateien dürfen nur nach juli22292/koda-releases veröffentlicht werden.')
   const repo = `${config.owner}/${config.repo}`
   const target = await githubRequest(`/repos/${repo}`)
   if (target.private) throw new Error('Die Downloadquelle muss öffentlich erreichbar sein.')

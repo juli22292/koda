@@ -89,7 +89,7 @@ export class Agent {
         return `Fehler: ${output}`
       }
     }
-    const tools = project ? {
+    const tools = project && request.mode !== 'chat' ? {
       list_files: tool({ description: 'List files and directories in the project. Use relative paths.', inputSchema: z.object({ path: z.string().describe('Relative directory, e.g. . or src') }), execute: ({ path }) => activity('list_files', { path }, async () => JSON.stringify(await listWorkspaceFiles(project.path, path))) }),
       read_file: tool({ description: 'Read a UTF-8 file in the project. Credentials are protected.', inputSchema: z.object({ path: z.string() }), execute: ({ path }) => activity('read_file', { path }, () => readWorkspaceFile(project.path, path)) }),
       ...(request.mode === 'code' ? {
@@ -120,7 +120,7 @@ export class Agent {
     try {
       const result = streamText({
         model: createModel({ ...config, model: request.model }, key),
-        system: `You are Koda, a precise and capable coding partner in a local desktop app. Reply in the user's language, German by default. Keep explanations clear and practical. Use Markdown. Never claim you ran commands or changed files unless tools confirm it. ${project ? `The selected project is ${project.name}. All file paths must be relative to its root. Start by inspecting relevant files. Do not access credentials or secrets. File changes and commands require the user's approval. If an action is denied, respect the decision. ${request.mode === 'ask' ? 'You are in read-only Ask mode. Explain and inspect; do not change files or run commands.' : 'Implement complete, working changes. Read before editing, preserve existing work, and verify when appropriate.'}` : 'No project folder is selected. You can discuss code and produce code snippets. Ask the user to open a folder when local files are needed.'}\n${settings.systemPrompt}`,
+        system: `You are Koda, a precise and capable ${request.mode === 'chat' ? 'conversational assistant' : 'coding partner'} in a local desktop app. Reply in the user's language, German by default. Keep explanations clear and practical. Use Markdown. Never claim you ran commands or changed files unless tools confirm it. ${request.mode === 'chat' ? 'Help with questions, writing, ideas, analysis and everyday tasks. You are in Chat mode with no access to local file tools or shell commands. You can use files explicitly attached to the conversation. Do not ask for a project folder unless the user wants to work on local code.' : project ? `The selected project is ${project.name}. All file paths must be relative to its root. Start by inspecting relevant files. Do not access credentials or secrets. File changes and commands require the user's approval. If an action is denied, respect the decision. ${request.mode === 'ask' ? 'You are in read-only Ask mode. Explain and inspect; do not change files or run commands.' : 'Implement complete, working changes. Read before editing, preserve existing work, and verify when appropriate.'}` : 'No project folder is selected. You can discuss code and produce code snippets. Ask the user to open a folder when local files are needed.'}\n${settings.systemPrompt}`,
         messages,
         tools,
         stopWhen: stepCountIs(20),

@@ -7,9 +7,9 @@ import { Mark, ProviderIcon } from './Brand'
 import { UpdateSettings } from './UpdateSettings'
 
 type Section = 'providers' | 'appearance' | 'general' | 'about'
-interface Props { settings: SettingsType; initialProvider?: ProviderId; onUpdate(settings: SettingsType): void; onClose(): void; notify(message: string): void }
-export function Settings({ settings, initialProvider, onUpdate, onClose, notify }: Props) {
-  const [section, setSection] = useState<Section>('providers')
+interface Props { settings: SettingsType; initialProvider?: ProviderId; initialSection?: Section; onUpdate(settings: SettingsType): void; onClose(): void; notify(message: string): void }
+export function Settings({ settings, initialProvider, initialSection, onUpdate, onClose, notify }: Props) {
+  const [section, setSection] = useState<Section>(initialSection || 'providers')
   const [provider, setProvider] = useState<ProviderId>(initialProvider || 'openai')
   const config = settings.providers.find(p => p.id === provider)!
   const meta = providerMeta(provider)

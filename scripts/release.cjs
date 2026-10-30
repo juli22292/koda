@@ -3,7 +3,6 @@ const fs = require('node:fs')
 const path = require('node:path')
 const semver = require('semver')
 const { publishRelease } = require('./publish-release.cjs')
-const { githubRequest } = require('./github-client.cjs')
 
 function command(executable, args, env = process.env) {
   const result = spawnSync(executable, args, { stdio: 'inherit', windowsHide: true, env })
@@ -32,8 +31,6 @@ function git(...args) { return execFileSync('git', args, { encoding: 'utf8', win
   command('git', ['add', 'package.json', 'package-lock.json'])
   command('git', ['commit', '-m', `Release Koda ${version}`])
   command('git', ['tag', '-a', `v${version}`, '-m', `Koda ${version}`])
-  const source = await githubRequest('/repos/juli22292/koda')
-  if (!source.private) throw new Error('Das Quellcode-Repository ist öffentlich. Vor dem Push und der Veröffentlichung wieder auf privat stellen.')
   command('git', ['push', 'origin', 'main', '--follow-tags'])
   await publishRelease()
 })().catch(error => { console.error(error.message); process.exitCode = 1 })

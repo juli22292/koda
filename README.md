@@ -1,6 +1,6 @@
 # Koda
 
-Ein eigenständiger Desktop-Client für die Arbeit an lokalen Codeprojekten. Mit einer ruhigen, an Claude orientierten Oberfläche und eigenen API-Keys. Entwickelt mit Electron, React und TypeScript.
+Ein eigenständiger Desktop-Client für Chats und die Arbeit an lokalen Codeprojekten. Mit einer ruhigen, an Claude orientierten Oberfläche und eigenen API-Keys. Entwickelt mit Electron, React und TypeScript.
 
 ## Direkt starten
 
@@ -32,6 +32,7 @@ Benötigt Node.js 22.12+ oder 24+. `npm run preview:web` zeigt die Oberfläche i
 - Ein eigener OpenAI-kompatibler Endpoint, z. B. für Ollama, LM Studio, OpenRouter oder andere Dienste. Bei lokalen Endpoints ist kein API-Key erforderlich.
 - Frei einstellbare Modell-IDs; Modelllisten werden mit dem eigenen Konto geladen.
 - Streaming-Chat, Markdown, hervorgehobene Codeblöcke und Kopieren.
+- Chat/Code-Umschalter: allgemeine Gespräche ohne lokale Werkzeuge oder Arbeit am Projekt mit einzelnen Freigaben. Bestehende Chats behalten ihren Modus; beim Wechsel wird Werkzeugkontext nicht in den Chat-Modus übernommen.
 - Lokale Projekte, Dateibaum, Textdateivorschau und Dateianhänge als Kontext.
 - Coding-Agent mit `list_files`, `read_file`, `write_file` und `run_command`, bis zu 20 Schritten pro Anfrage.
 - Vor jeder Dateiänderung erscheint der vollständige Diff; vor jedem Shell-Befehl der konkrete Befehl. Erst nach Freigabe wird die Aktion ausgeführt. Änderungen an inzwischen extern bearbeiteten Dateien werden abgebrochen.
@@ -39,13 +40,13 @@ Benötigt Node.js 22.12+ oder 24+. `npm run preview:web` zeigt die Oberfläche i
 - Stoppen laufender Antworten, lokale Chatsuche, Markdown-Export und Löschen einzelner Chats.
 - Helles, dunkles oder vom System abhängiges Farbschema, eigene Systemanweisungen und Chat-Schriftgröße.
 - Eigene Fenstertitelleiste, lokale Schriftarten und App-Icon.
-- Installationsassistent und automatische Update-Prüfung beim Start sowie alle vier Stunden.
+- Installationsassistent und automatische Update-Prüfung beim Start sowie jede Minute.
 - Ein Update-Symbol direkt links neben „Minimieren“, sobald eine neuere Version verfügbar ist. Anklicken lädt das Update; nach erfolgreichem Download startet ein weiterer Klick Koda neu und installiert es.
 - Laufende Antworten verhindern den Update-Neustart. Chats werden vor dem Neustart gespeichert; ein offener Entwurf wird nach dem Neustart wiederhergestellt.
 
 ## Updates veröffentlichen
 
-Der Entwicklungsquellcode bleibt im privaten Repository [juli22292/koda](https://github.com/juli22292/koda). Das öffentliche Repository [juli22292/koda-releases](https://github.com/juli22292/koda-releases) enthält ausschließlich Installer, Blockmaps und Update-Metadaten. Freunde benötigen dafür kein GitHub-Konto. Es werden keine GitHub-Zugangsdaten in die App eingebaut.
+Der Entwicklungsquellcode liegt im öffentlichen Repository [juli22292/koda](https://github.com/juli22292/koda). Das öffentliche Repository [juli22292/koda-releases](https://github.com/juli22292/koda-releases) enthält ausschließlich Installer, Blockmaps und Update-Metadaten. Die Release-Skripte ändern niemals die Sichtbarkeit eines Repositorys. Freunde benötigen dafür kein GitHub-Konto. Es werden keine GitHub-Zugangsdaten in die App eingebaut.
 
 Neue Änderungen zuerst auf `main` committen. Anschließend:
 
@@ -59,13 +60,13 @@ Alternativ eine konkrete höhere Version angeben:
 npm run release -- 0.3.0
 ```
 
-Der Befehl erhöht die Version, führt Tests aus, baut den Installer, prüft den gepackten Desktop-Client und den echten Update-Download gegen einen lokalen Testserver, erstellt Commit und Tag im privaten Repository und veröffentlicht anschließend einen Release im öffentlichen Download-Repository. Er nutzt die vorhandene Git-Credential-Manager-Anmeldung oder einen nur für den Veröffentlichungsprozess gesetzten `GH_TOKEN`. Geheimnisse werden nicht protokolliert oder in Dateien gespeichert.
+Der Befehl erhöht die Version, führt Tests aus, baut den Installer, prüft den gepackten Desktop-Client und den echten Update-Download gegen einen lokalen Testserver, erstellt Commit und Tag im Quellcode-Repository und veröffentlicht anschließend einen Release im öffentlichen Download-Repository. Er nutzt die vorhandene Git-Credential-Manager-Anmeldung oder einen nur für den Veröffentlichungsprozess gesetzten `GH_TOKEN`. Geheimnisse werden nicht protokolliert oder in Dateien gespeichert.
 
 Installer, `.blockmap` und `latest.yml` werden zunächst in einen Release-Entwurf hochgeladen. Erst nach vollständigem Upload wird der Release öffentlich. Scheitert ein Upload, bleibt der Entwurf unveröffentlicht. Ein bereits veröffentlichter Release wird nicht überschrieben.
 
 Falls der Build bereits fertig geprüft ist, kann `npm run release:publish` die Dateien der aktuellen Version veröffentlichen. Für einen erneuten Versuch nach einem Uploadfehler ist ebenfalls dieser Befehl geeignet.
 
-GitHub Actions führt bei Pushes, Tags und Pull Requests automatisch einen Windows-Build und dieselben Tests aus und speichert den Installer als privates Workflow-Artefakt. Die öffentliche Veröffentlichung erfolgt über den obigen Release-Befehl auf deinem angemeldeten Rechner; es muss dafür kein dauerhaftes persönliches GitHub-Token in Actions hinterlegt werden.
+GitHub Actions führt bei Pushes, Tags und Pull Requests automatisch einen Windows-Build und dieselben Tests aus und speichert den Installer als Workflow-Artefakt. Die öffentliche Veröffentlichung erfolgt über den obigen Release-Befehl auf deinem angemeldeten Rechner; es muss dafür kein dauerhaftes persönliches GitHub-Token in Actions hinterlegt werden.
 
 Der Installer ist derzeit nicht mit einem Windows-Herausgeberzertifikat signiert. Windows kann deshalb einen Hinweis auf einen unbekannten Herausgeber anzeigen. Downloads laufen über HTTPS; der Updater prüft den SHA-512-Hash des Installers und verwirft beschädigte Dateien. Ein Zertifikat lässt sich später ergänzen.
 

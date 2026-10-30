@@ -1,5 +1,5 @@
 export type ProviderId = 'openai' | 'anthropic' | 'google' | 'xai' | 'custom'
-export type Mode = 'code' | 'ask'
+export type Mode = 'chat' | 'code' | 'ask'
 export type Theme = 'light' | 'dark' | 'system'
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'error' | 'unsupported'
 export interface AppUpdateState {

@@ -18,7 +18,7 @@ export function UpdateSettings({ notify }: { notify(message: string): void }) {
     : state.status === 'downloading' ? `Update wird geladen: ${state.percent ?? 0} %`
     : state.status === 'checking' ? 'Neue Version wird gesucht …'
     : state.status === 'installing' ? 'Koda startet neu …'
-    : 'Prüft beim Start und alle vier Stunden auf neue Versionen.'
+    : 'Prüft beim Start und danach jede Minute auf neue Versionen.'
   return <div className="update-settings"><div><Download size={17}/><span><strong>Updates</strong><small>{text}</small></span></div><button className="button secondary" disabled={busy || state.status === 'unsupported'} onClick={async () => {
     try {
       const result = await bridge.checkForUpdates()

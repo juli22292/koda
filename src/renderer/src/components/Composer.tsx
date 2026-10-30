@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowUp, Check, ChevronDown, Code2, Folder, MessageSquare, Paperclip, Plus, Settings2, Square, X } from 'lucide-react'
-import type { Attachment, Mode, Project, ProviderId, Settings } from '../../../shared/types'
+import type { Attachment, Mode, PermissionMode, Project, ProviderId, Settings } from '../../../shared/types'
 import { isConfigured, modelLabel, PROVIDERS } from '../../../shared/providers'
 import { ProviderIcon } from './Brand'
+import { PermissionPicker } from './PermissionPicker'
 
 interface Props {
   draft: string; onDraft(value: string): void; attachments: Attachment[]; onRemoveAttachment(index: number): void
   onAttach(): void; project?: Project; onProject(): void; mode: Mode; onMode(mode: Mode): void
+  permissions: PermissionMode; onPermissions(value: PermissionMode): void
   provider: ProviderId; model: string; settings: Settings
   onSelectModel(provider: ProviderId, model: string): void; onSettings(provider?: ProviderId): void
   onSend(): void; onStop(): void; busy: boolean; compact?: boolean; focusKey: number
@@ -57,6 +59,7 @@ export function Composer(props: Props) {
       <div className="composer-tools">
         <button className="composer-project" onClick={props.onProject} title={project?.path || 'Projektordner auswählen'}><Folder size={14}/><span>{project?.name || 'Projekt'}</span><ChevronDown size={11}/></button>
         <div className="menu-anchor"><button className={`mode-button ${modeMenu ? 'open' : ''}`} onClick={() => { setModeMenu(!modeMenu); setModelMenu(false) }} aria-expanded={modeMenu}><selectedMode.icon size={14}/><span>{selectedMode.title}</span><ChevronDown size={11}/></button>{modeMenu && <div className="dropdown mode-menu"><span className="dropdown-label">ARBEITSWEISE</span>{modes.map(item => <button key={item.id} className={mode === item.id ? 'selected' : ''} onClick={() => { onMode(item.id); setModeMenu(false) }}><item.icon size={17}/><span><strong>{item.title}</strong><small>{item.description}</small></span>{mode === item.id && <Check size={14}/>}</button>)}</div>}</div>
+        {mode === 'code' && <PermissionPicker value={props.permissions} disabled={busy} onChange={props.onPermissions} onOpen={() => { setModelMenu(false); setModeMenu(false) }}/>}
       </div>
       <div className="menu-anchor model-anchor" ref={modelAnchor}>
         <button className="model-button" onClick={() => { setModelMenu(!modelMenu); setModeMenu(false); setQuery('') }} aria-expanded={modelMenu}><span className={`model-state ${connected ? 'ready' : ''}`}/><span>{connected ? modelLabel(model) : 'Modell wählen'}</span><ChevronDown size={12}/></button>

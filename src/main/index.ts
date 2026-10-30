@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, type IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
 import { promises as fs } from 'node:fs'
 import { Store } from './store'
@@ -105,6 +105,11 @@ async function createWindow() {
     beforeInstall: () => store.flush(),
   })
   registerIPC()
+  // Native shortcuts must be intercepted before Chromium or Electron's menu
+  // can reload the renderer and detach it from a running agent.
+  window.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F5' || ((input.control || input.meta) && input.key.toLowerCase() === 'r')) event.preventDefault()
+  })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', event => event.preventDefault())
   window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
@@ -115,7 +120,7 @@ async function createWindow() {
   updates.start()
 }
 app.whenReady().then(async () => {
-  try { await store.load(); await createWindow() } catch (error) { dialog.showErrorBox('Koda konnte nicht starten', error instanceof Error ? error.message : String(error)); app.quit() }
+  try { Menu.setApplicationMenu(null); await store.load(); await createWindow() } catch (error) { dialog.showErrorBox('Koda konnte nicht starten', error instanceof Error ? error.message : String(error)); app.quit() }
 })
 app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => updates?.dispose())

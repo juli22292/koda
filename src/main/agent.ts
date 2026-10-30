@@ -5,7 +5,8 @@ import { createGoogle } from '@ai-sdk/google'
 import { createXai } from '@ai-sdk/xai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { z } from 'zod'
-import { execFile } from 'node:child_process'
+import { runCommand } from './commands'
+import { permissionPolicy } from '../shared/permissions'
 import type { ChatEvent, ChatRequest, ToolActivity, ProviderConfig } from '../shared/types'
 import { listWorkspaceFiles, readWorkspaceFile, writeWorkspaceFile, workspacePath } from './workspace'
 import type { Store } from './store'
@@ -60,13 +61,15 @@ export class Agent {
     if (!request.model?.trim()) throw new Error('Bitte zuerst ein Modell wählen.')
     const project = this.store.data.projects.find(p => p.id === request.projectId)
     if (request.projectId && !project) throw new Error('Das Projekt ist nicht mehr verfügbar.')
+    const policy = permissionPolicy(request.mode, request.permissions)
     const controller = new AbortController()
     const run: Run = { controller, approvals: new Map() }
     this.runs.set(request.requestId, run)
     const emit = (event: Omit<Extract<ChatEvent, { type: 'tool' }>, 'requestId'>) => this.emit({ ...event, requestId: request.requestId })
-    const activity = async (name: string, input: Record<string, unknown>, execute: () => Promise<string>, approval = false, before?: string) => {
+    const activity = async (name: string, input: Record<string, unknown>, execute: (progress: (output: string) => void) => Promise<string>, requiresApproval = false, before?: string) => {
       const id = crypto.randomUUID()
-      const item: ToolActivity = { id, name, input, status: approval ? 'approval' : 'running', before }
+      const approval = requiresApproval && policy.needsApproval
+      const item: ToolActivity = { id, name, input, status: approval ? 'approval' : 'running', before, automatic: requiresApproval && !policy.needsApproval }
       if (controller.signal.aborted) throw new Error('Abgebrochen')
       if (approval) {
         const approved = await new Promise<boolean>(resolve => {
@@ -74,26 +77,31 @@ export class Agent {
           emit({ type: 'tool', tool: item })
         })
         if (!approved || controller.signal.aborted) {
-          emit({ type: 'tool', tool: { ...item, status: 'denied', output: 'Vom Nutzer abgelehnt.' } })
-          return 'Der Nutzer hat diese Aktion abgelehnt. Nicht erneut versuchen, bis er ausdrücklich darum bittet.'
+          emit({ type: 'tool', tool: { ...item, status: controller.signal.aborted ? 'cancelled' : 'denied', output: controller.signal.aborted ? 'Abgebrochen.' : 'Vom Nutzer abgelehnt.', finishedAt: Date.now() } })
+          return 'Der Nutzer hat diese Aktion abgelehnt oder gestoppt. Nicht erneut versuchen, bis er ausdrücklich darum bittet.'
         }
       }
-      emit({ type: 'tool', tool: { ...item, status: 'running' } })
+      const running: ToolActivity = { ...item, status: 'running', startedAt: Date.now() }
+      let latestOutput: string | undefined
+      emit({ type: 'tool', tool: running })
       try {
-        const output = await execute()
-        emit({ type: 'tool', tool: { ...item, status: 'done', output } })
+        const output = await execute(output => {
+          latestOutput = output
+          if (!controller.signal.aborted) emit({ type: 'tool', tool: { ...running, output } })
+        })
+        emit({ type: 'tool', tool: { ...running, status: 'done', output, finishedAt: Date.now() } })
         return output
       } catch (error) {
         const output = error instanceof Error ? error.message : 'Aktion fehlgeschlagen.'
-        emit({ type: 'tool', tool: { ...item, status: 'error', output } })
+        emit({ type: 'tool', tool: { ...running, status: controller.signal.aborted ? 'cancelled' : 'error', output: controller.signal.aborted ? latestOutput : output, finishedAt: Date.now() } })
         return `Fehler: ${output}`
       }
     }
-    const tools = project && request.mode !== 'chat' ? {
+    const tools = project && policy.canRead ? {
       list_files: tool({ description: 'List files and directories in the project. Use relative paths.', inputSchema: z.object({ path: z.string().describe('Relative directory, e.g. . or src') }), execute: ({ path }) => activity('list_files', { path }, async () => JSON.stringify(await listWorkspaceFiles(project.path, path))) }),
       read_file: tool({ description: 'Read a UTF-8 file in the project. Credentials are protected.', inputSchema: z.object({ path: z.string() }), execute: ({ path }) => activity('read_file', { path }, () => readWorkspaceFile(project.path, path)) }),
-      ...(request.mode === 'code' ? {
-        write_file: tool({ description: 'Create or replace a project file. Read existing files first. The user must approve the exact change.', inputSchema: z.object({ path: z.string(), content: z.string().describe('Full new file content') }), execute: async ({ path, content }) => {
+      ...(policy.canWrite ? {
+        write_file: tool({ description: `Create or replace a project file. Read existing files first. ${policy.needsApproval ? 'The user must approve the exact change.' : 'File changes are preapproved for this chat.'}`, inputSchema: z.object({ path: z.string(), content: z.string().describe('Full new file content') }), execute: async ({ path, content }) => {
           await workspacePath(project.path, path, true)
           const before = await readWorkspaceFile(project.path, path).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ''; throw error })
           return activity('write_file', { path, content }, async () => {
@@ -103,24 +111,14 @@ export class Agent {
             return `Datei gespeichert: ${path}`
           }, true, before)
         } }),
-        run_command: tool({ description: 'Run a shell command in the project. Requires explicit user approval every time. Do not read secrets. Prefer short, non-interactive commands.', inputSchema: z.object({ command: z.string(), explanation: z.string().describe('Brief explanation in the user language') }), execute: ({ command, explanation }) => activity('run_command', { command, explanation }, () => new Promise<string>((resolve, reject) => {
-          const executable = process.platform === 'win32' ? 'powershell.exe' : '/bin/sh'
-          const args = process.platform === 'win32' ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command] : ['-c', command]
-          // Provider keys live only in safeStorage; none are injected into the child environment.
-          execFile(executable, args, { cwd: project.path, windowsHide: true, timeout: 90000, maxBuffer: 1024 * 1024, signal: controller.signal }, (error, stdout, stderr) => {
-            if (controller.signal.aborted) return reject(new Error('Befehl abgebrochen.'))
-            const result = `${stdout}${stderr ? `\n${stderr}` : ''}`.slice(-24000)
-            if (error) reject(new Error(`Exit: ${(error as NodeJS.ErrnoException).code ?? 'Fehler'}\n${result || error.message}`))
-            else resolve(result || 'Befehl erfolgreich beendet (keine Ausgabe).')
-          })
-        }), true) }),
+        run_command: tool({ description: `Run a shell command in the project. ${policy.needsApproval ? 'Requires explicit user approval every time.' : 'Commands are preapproved for this chat.'} Do not read secrets. Prefer short, non-interactive commands.`, inputSchema: z.object({ command: z.string(), explanation: z.string().describe('Brief explanation in the user language') }), execute: ({ command, explanation }) => activity('run_command', { command, explanation }, onOutput => runCommand(command, { cwd: project.path, signal: controller.signal, onOutput }), true) }),
       } : {}),
     } : undefined
     const messages = (request.apiMessages?.length ? request.apiMessages : request.messages) as ModelMessage[]
     try {
       const result = streamText({
         model: createModel({ ...config, model: request.model }, key),
-        system: `You are Koda, a precise and capable ${request.mode === 'chat' ? 'conversational assistant' : 'coding partner'} in a local desktop app. Reply in the user's language, German by default. Keep explanations clear and practical. Use Markdown. Never claim you ran commands or changed files unless tools confirm it. ${request.mode === 'chat' ? 'Help with questions, writing, ideas, analysis and everyday tasks. You are in Chat mode with no access to local file tools or shell commands. You can use files explicitly attached to the conversation. Do not ask for a project folder unless the user wants to work on local code.' : project ? `The selected project is ${project.name}. All file paths must be relative to its root. Start by inspecting relevant files. Do not access credentials or secrets. File changes and commands require the user's approval. If an action is denied, respect the decision. ${request.mode === 'ask' ? 'You are in read-only Ask mode. Explain and inspect; do not change files or run commands.' : 'Implement complete, working changes. Read before editing, preserve existing work, and verify when appropriate.'}` : 'No project folder is selected. You can discuss code and produce code snippets. Ask the user to open a folder when local files are needed.'}\n${settings.systemPrompt}`,
+        system: `You are Koda, a precise and capable ${request.mode === 'chat' ? 'conversational assistant' : 'coding partner'} in a local desktop app. Reply in the user's language, German by default. Keep explanations clear and practical. Use Markdown. Never claim you ran commands or changed files unless tools confirm it. ${request.mode === 'chat' ? 'Help with questions, writing, ideas, analysis and everyday tasks. You are in Chat mode with no access to local file tools or shell commands. You can use files explicitly attached to the conversation. Do not ask for a project folder unless the user wants to work on local code.' : project ? `The selected project is ${project.name}. All file paths must be relative to its root. Start by inspecting relevant files. Do not access credentials or secrets. ${policy.needsApproval ? "File changes and commands require the user's approval." : 'Full access is enabled for this chat: file changes and commands are preapproved and may be executed without asking again, with the OS user permissions.'} If an action is denied, respect the decision. ${!policy.canWrite ? 'You are in read-only mode. Explain and inspect; do not change files or run commands.' : 'Implement complete, working changes. Read before editing, preserve existing work, and verify when appropriate.'}` : 'No project folder is selected. You can discuss code and produce code snippets. Ask the user to open a folder when local files are needed.'}\n${settings.systemPrompt}`,
         messages,
         tools,
         stopWhen: stepCountIs(20),

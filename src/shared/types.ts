@@ -1,5 +1,6 @@
 export type ProviderId = 'openai' | 'anthropic' | 'google' | 'xai' | 'custom'
 export type Mode = 'chat' | 'code' | 'ask'
+export type PermissionMode = 'read-only' | 'ask' | 'full-access'
 export type Theme = 'light' | 'dark' | 'system'
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'error' | 'unsupported'
 export interface AppUpdateState {
@@ -29,9 +30,12 @@ export interface ToolActivity {
   id: string
   name: string
   input: Record<string, unknown>
-  status: 'running' | 'approval' | 'done' | 'error' | 'denied'
+  status: 'running' | 'approval' | 'done' | 'error' | 'denied' | 'cancelled'
   output?: string
   before?: string
+  startedAt?: number
+  finishedAt?: number
+  automatic?: boolean
 }
 export interface Message {
   id: string
@@ -51,6 +55,7 @@ export interface Conversation {
   provider: ProviderId
   model: string
   mode: Mode
+  permissions?: PermissionMode
   messages: Message[]
   apiMessages?: unknown[]
   updatedAt: number
@@ -64,6 +69,7 @@ export interface ChatRequest {
   provider: ProviderId
   model: string
   mode: Mode
+  permissions?: PermissionMode
   projectId?: string
   messages: { role: 'user' | 'assistant'; content: string }[]
   apiMessages?: unknown[]

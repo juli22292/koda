@@ -35,11 +35,14 @@ Benötigt Node.js 22.12+ oder 24+. `npm run preview:web` zeigt die Oberfläche i
 - Chat/Code-Umschalter: allgemeine Gespräche ohne lokale Werkzeuge oder Arbeit am Projekt mit einzelnen Freigaben. Bestehende Chats behalten ihren Modus; beim Wechsel wird Werkzeugkontext nicht in den Chat-Modus übernommen.
 - Lokale Projekte, Dateibaum, Textdateivorschau und Dateianhänge als Kontext.
 - Coding-Agent mit `list_files`, `read_file`, `write_file` und `run_command`, bis zu 20 Schritten pro Anfrage.
-- Vor jeder Dateiänderung erscheint der vollständige Diff; vor jedem Shell-Befehl der konkrete Befehl. Erst nach Freigabe wird die Aktion ausgeführt. Änderungen an inzwischen extern bearbeiteten Dateien werden abgebrochen.
+- Rechte pro Chat: **Nur lesen**, **Nachfragen** und **Vollzugriff**. Neue Chats verwenden „Nachfragen“; vorhandene Chats ohne gespeicherte Auswahl ebenfalls. Die Auswahl gilt im Code-Modus; Chat hat keine lokalen Werkzeuge, Fragen bleibt lesend.
+- Mit „Nachfragen“ erscheint vor Dateiänderungen der vollständige Diff und vor Shell-Befehlen der konkrete Befehl. Erst nach Freigabe wird ausgeführt. Mit „Vollzugriff“ werden Änderungen und Befehle ohne Einzelabfrage mit den Benutzerrechten des Betriebssystems ausgeführt. Dateiwerkzeuge bleiben an das Projekt gebunden; Terminalbefehle sind keine Betriebssystem-Sandbox.
+- Befehle zeigen Live-Ausgabe, Laufzeit und einen animierten Status. Stoppen beendet auch Kindprozesse. Änderungen an inzwischen extern bearbeiteten Dateien werden abgebrochen.
 - Fragen-Modus mit ausschließlich lesenden Werkzeugen.
 - Stoppen laufender Antworten, lokale Chatsuche, Markdown-Export und Löschen einzelner Chats.
 - Helles, dunkles oder vom System abhängiges Farbschema, eigene Systemanweisungen und Chat-Schriftgröße.
 - Eigene Fenstertitelleiste, lokale Schriftarten und App-Icon.
+- Kurze Begrüßungen passend zur lokalen Tageszeit, die sich automatisch und beim Zurückkehren in die App aktualisieren. Strg+R, Strg+Umschalt+R und F5 laden das Fenster nicht neu.
 - Installationsassistent und automatische Update-Prüfung beim Start sowie jede Minute.
 - Ein Update-Symbol direkt links neben „Minimieren“, sobald eine neuere Version verfügbar ist. Anklicken lädt das Update; nach erfolgreichem Download startet ein weiterer Klick Koda neu und installiert es.
 - Laufende Antworten verhindern den Update-Neustart. Chats werden vor dem Neustart gespeichert; ein offener Entwurf wird nach dem Neustart wiederhergestellt.
@@ -96,11 +99,12 @@ npm run typecheck
 npm test
 npm run build
 npm run test:e2e
+npm run test:agent
 npm run test:updates
 npm run dist
 ```
 
-Die Tests verwenden ausschließlich lokale HTTP-Testanbieter und temporäre Projektordner. Die End-to-End-Tests starten die echte Electron-App und prüfen Key-Verschlüsselung, Dateizugriff, Streaming, mehrstufige Werkzeugaufrufe, Freigaben, Ablehnen, Stoppen, Fehlerbehandlung und Verlauf. Anbieter-Vertragstests prüfen die nativen Request- und Response-Formate aller fünf Adapter. Update-Tests prüfen außerdem Symbolposition, Verfügbarkeit, Offline-Fälle, einen echten Download, die Ablehnung eines falschen Hashes, einen erneuten Download, den Neustartschutz und den Erhalt von Chat und Entwurf. Der Test-Installer wird heruntergeladen, aber nicht ausgeführt. Kostenpflichtige Live-Anfragen werden nicht ausgeführt.
+Die Tests verwenden ausschließlich lokale HTTP-Testanbieter und temporäre Projektordner. Die End-to-End-Tests starten die echte Electron-App und prüfen Key-Verschlüsselung, Dateizugriff, Streaming, mehrstufige Werkzeugaufrufe, Freigaben, Ablehnen, Stoppen, Fehlerbehandlung und Verlauf. `test:agent` prüft zusätzlich Vollzugriff, lesende Rechte, Live-Ausgabe und Animation, das Stoppen von Kindprozessen, gespeicherte Rechte, Begrüßungen nach lokaler Tageszeit sowie gesperrte Reload-Tastenkürzel während eines laufenden Befehls. Anbieter-Vertragstests prüfen die nativen Request- und Response-Formate aller fünf Adapter. Update-Tests prüfen außerdem Symbolposition, Verfügbarkeit, Offline-Fälle, einen echten Download, die Ablehnung eines falschen Hashes, einen erneuten Download, den Neustartschutz und den Erhalt von Chat und Entwurf. Der Test-Installer wird heruntergeladen, aber nicht ausgeführt. Kostenpflichtige Live-Anfragen werden nicht ausgeführt.
 
 ## Projektstruktur
 

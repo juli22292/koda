@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { ArrowDown, ArrowRight, ArrowUpRight, Check, ChevronRight, Code2, Copy, Download, Ellipsis, FileCode2, FolderOpen, LoaderCircle, MessageSquare, PanelRight, Plus, Search, Trash2, X } from 'lucide-react'
-import type { AppData, AppUpdateState, Attachment, ChatEvent, Conversation, Message, Mode, Project, ProviderId, Settings as SettingsType } from '../../shared/types'
+import type { AppData, AppUpdateState, Attachment, ChatEvent, Conversation, Message, Mode, PermissionMode, Project, ProviderId, Settings as SettingsType } from '../../shared/types'
 import { defaultSettings, isConfigured, modelLabel } from '../../shared/providers'
 import { bridge } from './bridge'
+import { greetingForHour } from '../../shared/greeting'
 import { Mark } from './components/Brand'
 import { Settings } from './components/Settings'
 import { Composer } from './components/Composer'
@@ -30,6 +31,14 @@ export default function App() {
   const [provider, setProvider] = useState<ProviderId>('openai')
   const [model, setModel] = useState(defaultSettings().providers[0].model)
   const [mode, setMode] = useState<Mode>('chat')
+  const [permissions, setPermissions] = useState<PermissionMode>('ask')
+  const [localTime, setLocalTime] = useState(() => new Date())
+  useEffect(() => {
+    const refresh = () => setLocalTime(new Date())
+    const timer = setInterval(refresh, 60_000)
+    window.addEventListener('focus', refresh); document.addEventListener('visibilitychange', refresh)
+    return () => { clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
+  }, [])
   const [draft, setDraft] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -62,7 +71,7 @@ export default function App() {
   }, [])
   const beforeRestart = async () => {
     if (activeRef.current) throw new Error('Warte auf die laufende Antwort, bevor du Koda neu startest.')
-    localStorage.setItem('koda-restart-session', JSON.stringify({ selectedId, projectId, provider, model, mode, draft, attachments, view }))
+    localStorage.setItem('koda-restart-session', JSON.stringify({ selectedId, projectId, provider, model, mode, permissions, draft, attachments, view }))
     await bridge.saveData(data)
   }
   useEffect(() => {
@@ -79,6 +88,7 @@ export default function App() {
           if (session.projectId && data.projects.some(p => p.id === session.projectId)) setProjectId(session.projectId)
           if (settings.providers.some(p => p.id === session.provider)) { setProvider(session.provider); if (typeof session.model === 'string') setModel(session.model) }
           if (session.mode === 'chat' || session.mode === 'code' || session.mode === 'ask') setMode(session.mode)
+          if (['read-only', 'ask', 'full-access'].includes(session.permissions)) setPermissions(session.permissions)
           if (typeof session.draft === 'string') setDraft(session.draft)
           if (Array.isArray(session.attachments)) setAttachments(session.attachments)
           if (['workspace', 'projects', 'history'].includes(session.view)) setView(session.view)
@@ -108,9 +118,9 @@ export default function App() {
       return { ...c, updatedAt: Date.now(), apiMessages: undefined, messages: c.messages.map(m => {
         if (m.id !== active.messageId) return m
         if (event.type === 'text') return { ...m, content: m.content + event.text }
-        if (event.type === 'tool') return { ...m, tools: [...(m.tools || []).filter(t => t.id !== event.tool.id), event.tool] }
+        if (event.type === 'tool') return { ...m, tools: m.tools?.some(t => t.id === event.tool.id) ? m.tools.map(t => t.id === event.tool.id ? event.tool : t) : [...(m.tools || []), event.tool] }
         if (event.type === 'error') return { ...m, error: event.error }
-        if (event.type === 'aborted') return { ...m, interrupted: true, tools: m.tools?.map(t => t.status === 'approval' || t.status === 'running' ? { ...t, status: 'denied' as const } : t) }
+        if (event.type === 'aborted') return { ...m, interrupted: true, tools: m.tools?.map(t => t.status === 'approval' || t.status === 'running' ? { ...t, status: 'cancelled' as const, finishedAt: Date.now() } : t) }
         return m
       }) }
     }) }))
@@ -121,13 +131,14 @@ export default function App() {
     if (autoScroll && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [conversation?.messages, autoScroll])
   const newChat = useCallback((project?: string) => {
-    setSelectedId(null); setView('workspace'); setProjectId(project); setDraft(''); setAttachments([]); setQuery(''); setAutoScroll(true); setMoreOpen(false); setFocusKey(v => v + 1)
+    setPermissions('ask'); setSelectedId(null); setView('workspace'); setProjectId(project); setDraft(''); setAttachments([]); setQuery(''); setAutoScroll(true); setMoreOpen(false); setFocusKey(v => v + 1)
   }, [])
   const selectChat = (chat: Conversation) => {
-    setSelectedId(chat.id); setView('workspace'); setProjectId(chat.projectId); setProvider(chat.provider); setModel(chat.model); setMode(chat.mode); setDraft(''); setAttachments([]); setAutoScroll(true); setMoreOpen(false)
+    setSelectedId(chat.id); setView('workspace'); setProjectId(chat.projectId); setProvider(chat.provider); setModel(chat.model); setMode(chat.mode); setPermissions(chat.permissions || 'ask'); setDraft(''); setAttachments([]); setAutoScroll(true); setMoreOpen(false)
   }
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
+      if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r')) { e.preventDefault(); return }
       if (e.ctrlKey && e.key.toLowerCase() === 'n') { e.preventDefault(); if (!stateRef.current.settingsOpen) newChat() }
       if (e.ctrlKey && e.key === ',') { e.preventDefault(); setSettingsOpen(v => !v) }
       if (e.ctrlKey && e.key.toLowerCase() === 'k') { e.preventDefault(); if (!stateRef.current.settingsOpen) { setView('history'); setTimeout(() => document.getElementById('chat-search')?.focus(), 30) } }
@@ -160,13 +171,13 @@ export default function App() {
     const assistant: Message = { id: assistantId, role: 'assistant', content: '', createdAt: now, model }
     const previous = conversation?.messages || []
     const messages = [...previous, user]
-    const apiMessages = conversation?.apiMessages?.length && conversation.provider === provider && conversation.model === model && conversation.mode === mode ? [...conversation.apiMessages, { role: 'user', content: withAttachments(user) }] : undefined
-    const chat: Conversation = { ...conversation, id, title: conversation?.title || draft.trim().split('\n')[0].slice(0, 65), projectId: conversation?.projectId ?? projectId, provider, model, mode, messages: [...messages, assistant], apiMessages: undefined, updatedAt: now }
+    const apiMessages = conversation?.apiMessages?.length && conversation.provider === provider && conversation.model === model && conversation.mode === mode && (conversation.permissions || 'ask') === permissions ? [...conversation.apiMessages, { role: 'user', content: withAttachments(user) }] : undefined
+    const chat: Conversation = { ...conversation, id, title: conversation?.title || draft.trim().split('\n')[0].slice(0, 65), projectId: conversation?.projectId ?? projectId, provider, model, mode, permissions, messages: [...messages, assistant], apiMessages: undefined, updatedAt: now }
     const run = { requestId, conversationId: id, messageId: assistantId }
     activeRef.current = run; setActiveRun(run); setSelectedId(id); setAutoScroll(true); setView('workspace'); setDraft(''); setAttachments([])
     setData(current => ({ ...current, conversations: [chat, ...current.conversations.filter(c => c.id !== id)] }))
     try {
-      await bridge.startChat({ requestId, conversationId: id, provider, model, mode, projectId: chat.projectId, messages: messages.filter(m => m.content).map(m => ({ role: m.role, content: withAttachments(m) })), apiMessages })
+      await bridge.startChat({ requestId, conversationId: id, provider, model, mode, permissions, projectId: chat.projectId, messages: messages.filter(m => m.content).map(m => ({ role: m.role, content: withAttachments(m) })), apiMessages })
     } catch (error) {
       setData(current => ({ ...current, conversations: current.conversations.map(c => c.id !== id ? c : { ...c, messages: c.messages.map(m => m.id === assistantId ? { ...m, error: errorText(error) } : m) }) }))
       activeRef.current = null; setActiveRun(null)
@@ -186,9 +197,12 @@ export default function App() {
   }
   const filteredChats = data.conversations.filter(c => !query || `${c.title} ${c.messages.map(m => m.content).join(' ')}`.toLowerCase().includes(query.toLowerCase())).sort((a, b) => b.updatedAt - a.updatedAt)
   const chooseMode = (next: Mode) => { setMode(next); setView('workspace'); setFocusKey(v => v + 1) }
-  const hour = new Date().getHours()
-  const greeting = mode !== 'chat' ? 'Was bauen wir heute?' : hour < 6 || hour >= 22 ? 'Hallo, Nachteule' : hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Hallo, was gibt’s Neues?' : 'Guten Abend'
-  const composer = <Composer draft={draft} onDraft={setDraft} attachments={attachments} onRemoveAttachment={index => setAttachments(a => a.filter((_, i) => i !== index))} onAttach={() => void attachFiles()} project={selectedProject} onProject={() => selectedProject ? setFilesOpen(v => !v) : void openProject()} mode={mode} onMode={chooseMode} provider={provider} model={model} settings={settings} onSelectModel={(id, model) => { setProvider(id); setModel(model) }} onSettings={openSettings} onSend={() => void send()} onStop={() => { if (activeRef.current) void bridge.stopChat(activeRef.current.requestId).catch(error => notify(errorText(error))) }} busy={!!activeRun} compact={!!conversation} focusKey={focusKey}/>
+  const choosePermissions = (next: PermissionMode) => {
+    setPermissions(next)
+    if (selectedId) setData(current => ({ ...current, conversations: current.conversations.map(chat => chat.id === selectedId ? { ...chat, permissions: next, apiMessages: undefined } : chat) }))
+  }
+  const greeting = greetingForHour(localTime.getHours())
+  const composer = <Composer draft={draft} onDraft={setDraft} attachments={attachments} onRemoveAttachment={index => setAttachments(a => a.filter((_, i) => i !== index))} onAttach={() => void attachFiles()} project={selectedProject} onProject={() => selectedProject ? setFilesOpen(v => !v) : void openProject()} mode={mode} onMode={chooseMode} permissions={permissions} onPermissions={choosePermissions} provider={provider} model={model} settings={settings} onSelectModel={(id, model) => { setProvider(id); setModel(model) }} onSettings={openSettings} onSend={() => void send()} onStop={() => { if (activeRef.current) void bridge.stopChat(activeRef.current.requestId).catch(error => notify(errorText(error))) }} busy={!!activeRun} compact={!!conversation} focusKey={focusKey}/>
   if (loadError) return <div className="startup-error"><Mark size={36}/><h2>Koda konnte deine Daten nicht laden.</h2><p>{loadError}</p><button className="button secondary" onClick={() => window.location.reload()}>Erneut versuchen</button></div>
   return <div className="app-shell" style={{ '--chat-font-size': `${settings.fontSize}px` } as CSSProperties}>
     <Titlebar sidebar={sidebar} onToggleSidebar={() => setSidebar(v => !v)} mode={mode} onMode={chooseMode} update={updateState} busy={!!activeRun} beforeRestart={beforeRestart} notify={notify}/>

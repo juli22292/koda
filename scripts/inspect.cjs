@@ -1,0 +1,26 @@
+const { _electron: electron } = require('playwright')
+const fs = require('node:fs/promises')
+const path = require('node:path')
+const os = require('node:os')
+
+;(async () => {
+  const data = await fs.mkdtemp(path.join(os.tmpdir(), 'koda-preview-'))
+  const env = { ...process.env, KODA_USER_DATA: data }
+  delete env.ELECTRON_RUN_AS_NODE
+  const app = await electron.launch({ executablePath: require('electron'), args: [path.resolve('.')], env })
+  const page = await app.firstWindow()
+  page.setDefaultTimeout(15000)
+  page.on('pageerror', error => process.stdout.write(`PAGE ERROR: ${error.message}\n`))
+  page.on('console', message => { if (message.type() === 'error') console.log('CONSOLE:', message.text()) })
+  await page.waitForLoadState('domcontentloaded')
+  console.log('BODY:', (await page.locator('body').innerText()).slice(0, 1000))
+  await page.getByRole('heading', { name: 'Was bauen wir heute?' }).waitFor()
+  await page.evaluate(() => document.fonts.ready)
+  await fs.mkdir('artifacts', { recursive: true })
+  await page.screenshot({ path: 'artifacts/home.png', animations: 'disabled' })
+  await page.locator('.sidebar-settings').click()
+  await page.getByRole('dialog').waitFor()
+  await page.screenshot({ path: 'artifacts/settings.png', animations: 'disabled' })
+  console.log(JSON.stringify({ title: await page.title(), data, url: page.url(), viewport: await page.evaluate(() => ({ width: innerWidth, height: innerHeight })), errors: await page.locator('.form-status.error').allTextContents() }))
+  await app.close()
+})().catch(error => { console.error(error); process.exit(1) })

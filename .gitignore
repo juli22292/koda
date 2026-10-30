@@ -1,0 +1,14 @@
+node_modules/
+out/
+dist/
+release/
+.env*
+!.env.example
+*.log
+.test-data/
+artifacts/
+coverage/
+*.pfx
+*.p12
+*.pem
+*.key

@@ -1,6 +1,7 @@
 export type ProviderId = 'openai' | 'anthropic' | 'google' | 'xai' | 'custom'
 export type Mode = 'chat' | 'code' | 'ask'
 export type PermissionMode = 'read-only' | 'ask' | 'full-access'
+export type ReasoningEffort = 'auto' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 export type Theme = 'light' | 'dark' | 'system'
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'error' | 'unsupported'
 export interface AppUpdateState {
@@ -23,6 +24,7 @@ export interface Settings {
   theme: Theme
   systemPrompt: string
   fontSize: number
+  effortPreferences?: Record<string, ReasoningEffort>
 }
 export interface Project { id: string; name: string; path: string; lastOpened: number }
 export interface Attachment { name: string; content: string; path?: string }
@@ -37,6 +39,7 @@ export interface ToolActivity {
   before?: string
   startedAt?: number
   finishedAt?: number
+  elapsedMs?: number
   automatic?: boolean
   artifacts?: BuildArtifact[]
 }
@@ -59,6 +62,7 @@ export interface Conversation {
   model: string
   mode: Mode
   permissions?: PermissionMode
+  effort?: ReasoningEffort
   messages: Message[]
   apiMessages?: unknown[]
   updatedAt: number
@@ -73,6 +77,7 @@ export interface ChatRequest {
   model: string
   mode: Mode
   permissions?: PermissionMode
+  effort?: ReasoningEffort
   projectId?: string
   messages: { role: 'user' | 'assistant'; content: string }[]
   apiMessages?: unknown[]

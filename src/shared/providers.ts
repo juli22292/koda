@@ -9,7 +9,7 @@ export const PROVIDERS: { id: ProviderId; name: string; company: string; letter:
 ]
 export const defaultSettings = (): Settings => ({
   providers: PROVIDERS.map(p => ({ id: p.id, model: p.model, baseURL: p.baseURL, hasKey: false, models: [] })),
-  defaultProvider: 'openai', theme: 'dark', systemPrompt: '', fontSize: 14,
+  defaultProvider: 'openai', theme: 'dark', systemPrompt: '', fontSize: 14, effortPreferences: {},
 })
 export const providerMeta = (id: ProviderId) => PROVIDERS.find(p => p.id === id)!
 export function modelLabel(model: string) {

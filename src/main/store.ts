@@ -3,6 +3,8 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import type { AppData, ProviderId, Settings } from '../shared/types'
 import { defaultSettings, PROVIDERS } from '../shared/providers'
+import { normalizeEffort } from '../shared/effort'
+import { restoreInterruptedActivities } from '../shared/activity-time'
 
 interface DiskSettings extends Settings { secrets: Partial<Record<ProviderId, string>> }
 export class Store {
@@ -16,7 +18,7 @@ export class Store {
       const disk = JSON.parse(await fs.readFile(path.join(this.directory, 'settings.json'), 'utf8')) as DiskSettings
       this.settings = { ...this.settings, ...disk, providers: PROVIDERS.map(p => ({ ...defaultSettings().providers.find(d => d.id === p.id)!, ...disk.providers?.find(d => d.id === p.id) })) }
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Die Einstellungen konnten nicht gelesen werden. Die vorhandene Datei bleibt erhalten.') }
-    try { this.data = JSON.parse(await fs.readFile(path.join(this.directory, 'workspace.json'), 'utf8')) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Der Chatverlauf konnte nicht gelesen werden. Die vorhandene Datei bleibt erhalten.') }
+    try { this.data = restoreInterruptedActivities(JSON.parse(await fs.readFile(path.join(this.directory, 'workspace.json'), 'utf8'))) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Der Chatverlauf konnte nicht gelesen werden. Die vorhandene Datei bleibt erhalten.') }
   }
   private write(name: string, value: unknown) {
     const serialized = JSON.stringify(value, null, 2)
@@ -45,6 +47,15 @@ export class Store {
     if (patch.defaultProvider && PROVIDERS.some(p => p.id === patch.defaultProvider)) this.settings.defaultProvider = patch.defaultProvider
     if (typeof patch.systemPrompt === 'string') this.settings.systemPrompt = patch.systemPrompt.slice(0, 12000)
     if (typeof patch.fontSize === 'number') this.settings.fontSize = Math.min(18, Math.max(12, patch.fontSize))
+    if (patch.effortPreferences && typeof patch.effortPreferences === 'object') {
+      const preferences = { ...this.settings.effortPreferences }
+      for (const [key, value] of Object.entries(patch.effortPreferences).slice(0, 300)) {
+        const separator = key.indexOf(':')
+        const provider = key.slice(0, separator) as ProviderId, model = key.slice(separator + 1)
+        if (separator > 0 && model.length <= 200 && PROVIDERS.some(item => item.id === provider)) preferences[key] = normalizeEffort(provider, model, value)
+      }
+      this.settings.effortPreferences = Object.fromEntries(Object.entries(preferences).slice(-300))
+    }
     await this.write('settings.json', this.settings)
     return this.publicSettings()
   }

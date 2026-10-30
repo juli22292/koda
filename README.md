@@ -31,6 +31,7 @@ Benötigt Node.js 22.12+ oder 24+. `npm run preview:web` zeigt die Oberfläche i
 - OpenAI über die Responses API, Anthropic Claude über die Messages API, Google Gemini und xAI Grok über native SDK-Adapter.
 - Ein eigener OpenAI-kompatibler Endpoint, z. B. für Ollama, LM Studio, OpenRouter oder andere Dienste. Bei lokalen Endpoints ist kein API-Key erforderlich.
 - Frei einstellbare Modell-IDs; Modelllisten werden mit dem eigenen Konto geladen.
+- Effort-Auswahl neben dem Modell mit den jeweils unterstützten Stufen. Die Auswahl wird pro Modell und im Chat gespeichert.
 - Streaming-Chat, Markdown, hervorgehobene Codeblöcke und Kopieren.
 - Chat/Code-Umschalter: allgemeine Gespräche ohne lokale Werkzeuge oder Arbeit am Projekt mit einzelnen Freigaben. Bestehende Chats behalten ihren Modus; beim Wechsel wird Werkzeugkontext nicht in den Chat-Modus übernommen.
 - Lokale Projekte, Dateibaum, Textdateivorschau und Dateianhänge als Kontext.
@@ -38,7 +39,7 @@ Benötigt Node.js 22.12+ oder 24+. `npm run preview:web` zeigt die Oberfläche i
 - Projekt-Builds für Java-/Minecraft-Plugins mit Maven oder Gradle, automatischer JDK-/Werkzeugeinrichtung, Live-Ausgabe und JAR-Ergebnissen mit „Im Ordner anzeigen“.
 - Rechte pro Chat: **Nur lesen**, **Nachfragen** und **Vollzugriff**. Neue Chats verwenden „Nachfragen“; vorhandene Chats ohne gespeicherte Auswahl ebenfalls. Die Auswahl gilt im Code-Modus; Chat hat keine lokalen Werkzeuge, Fragen bleibt lesend.
 - Mit „Nachfragen“ erscheint vor Dateiänderungen der vollständige Diff und vor Shell-Befehlen der konkrete Befehl. Erst nach Freigabe wird ausgeführt. Mit „Vollzugriff“ werden Änderungen und Befehle ohne Einzelabfrage mit den Benutzerrechten des Betriebssystems ausgeführt. Dateiwerkzeuge bleiben an das Projekt gebunden; Terminalbefehle sind keine Betriebssystem-Sandbox.
-- Befehle zeigen Live-Ausgabe, Laufzeit und einen animierten Status. Stoppen beendet auch Kindprozesse. Änderungen an inzwischen extern bearbeiteten Dateien werden abgebrochen.
+- Befehle zeigen Live-Ausgabe, gemessene Laufzeit und einen animierten Status. Die Zeitmessung ist unabhängig von der Systemuhr; unterbrochene Aktionen laufen nach einem Neustart nicht scheinbar weiter. Stoppen beendet auch Kindprozesse. Änderungen an inzwischen extern bearbeiteten Dateien werden abgebrochen.
 - Fragen-Modus mit ausschließlich lesenden Werkzeugen.
 - Stoppen laufender Antworten, lokale Chatsuche, Markdown-Export und Löschen einzelner Chats.
 - Helles, dunkles oder vom System abhängiges Farbschema, eigene Systemanweisungen und Chat-Schriftgröße.
@@ -47,6 +48,16 @@ Benötigt Node.js 22.12+ oder 24+. `npm run preview:web` zeigt die Oberfläche i
 - Installationsassistent und automatische Update-Prüfung beim Start sowie jede Minute.
 - Ein Update-Symbol direkt links neben „Minimieren“, sobald eine neuere Version verfügbar ist. Anklicken lädt das Update; nach erfolgreichem Download startet ein weiterer Klick Koda neu und installiert es.
 - Laufende Antworten verhindern den Update-Neustart. Chats werden vor dem Neustart gespeichert; ein offener Entwurf wird nach dem Neustart wiederhergestellt.
+
+## Effort auswählen
+
+Bei unterstützten Modellen erscheint neben der Modellauswahl ein Gehirn-Symbol mit der aktuellen Effort-Stufe. **Auto** lässt die Vorgabe des Anbieters unverändert. Die übrigen Stufen hängen vom konkreten Modell ab; beispielsweise haben GPT-6.1 Sol, Claude Sonnet 5.5 und Gemini 3.8 Flash unterschiedliche Grenzen. Mehr Effort kann die Antwortzeit und den Tokenverbrauch erhöhen. Koda überträgt die Auswahl als nativen Anbieterparameter und lässt bei höheren Stufen mehr Platz für die Ausgabe. Es ist keine vorgegebene Antwortlänge und keine Zusage besserer Ergebnisse.
+
+Die Auswahl wird pro Anbieter und Modell gespeichert, beim Modellwechsel wiederhergestellt und im jeweiligen Chat übernommen. Während einer laufenden Antwort ist die Auswahl gesperrt. Bei Gemini 2.5 werden passende Thinking-Budgets verwendet; bei neueren Gemini-Modellen die unterstützten Thinking-Level. Unterstützte neuere Claude-Modelle verwenden adaptives Denken.
+
+Die unterstützten Modellfamilien stehen ausdrücklich in `src/shared/effort.ts`. Unbekannte Modelle, Modelle ohne native Unterstützung und beliebige OpenAI-kompatible Endpoints erhalten keine Effort-Auswahl und keine geratenen Parameter. Die Modellliste allein liefert dafür keine verlässlichen Fähigkeiten. Dokumentationsstand: 30.10.2026; neue Modellfamilien müssen mit ihren tatsächlich unterstützten Stufen ergänzt werden.
+
+Grundlagen: [OpenAI Reasoning](https://developers.openai.com/api/docs/guides/reasoning), [Claude Effort](https://platform.claude.com/docs/en/build-with-claude/effort), [Gemini Thinking](https://ai.google.dev/gemini-api/docs/generate-content/thinking), [xAI Reasoning](https://docs.x.ai/developers/model-capabilities/text/reasoning).
 
 ## Java- und Minecraft-Projekte kompilieren
 
@@ -116,13 +127,16 @@ npm run build
 npm run test:e2e
 npm run test:agent
 npm run test:builds
+npm run test:effort
 npm run test:updates
 npm run dist
 ```
 
 Die Tests verwenden ausschließlich lokale HTTP-Testanbieter und temporäre Projektordner. Die End-to-End-Tests starten die echte Electron-App und prüfen Key-Verschlüsselung, Dateizugriff, Streaming, mehrstufige Werkzeugaufrufe, Freigaben, Ablehnen, Stoppen, Fehlerbehandlung und Verlauf. `test:agent` prüft zusätzlich Vollzugriff, lesende Rechte, Live-Ausgabe und Animation, das Stoppen von Kindprozessen, gespeicherte Rechte, Begrüßungen nach lokaler Tageszeit sowie gesperrte Reload-Tastenkürzel während eines laufenden Befehls. Anbieter-Vertragstests prüfen die nativen Request- und Response-Formate aller fünf Adapter. Update-Tests prüfen außerdem Symbolposition, Verfügbarkeit, Offline-Fälle, einen echten Download, die Ablehnung eines falschen Hashes, einen erneuten Download, den Neustartschutz und den Erhalt von Chat und Entwurf. Der Test-Installer wird heruntergeladen, aber nicht ausgeführt. Kostenpflichtige Live-Anfragen werden nicht ausgeführt.
 
-`test:builds` prüft den kompletten Build-Chat mit einem lokalen Modell-Testserver und einem vorhandenen JDK 17 oder 21: Ablehnen ohne Einrichtung/Ausführung, Compilerfehler, freigegebene Korrektur, erfolgreicher Neubau, Java-Bytecode-Version, JAR-Anzeige, validiertes Öffnen des Ordners, Vollzugriff und lesende Rechte. Unit-Tests prüfen außerdem Erkennung, Prüfsummen, Cache, Abbruch und unsichere Archive.
+`test:builds` prüft den kompletten Build-Chat mit einem lokalen Modell-Testserver und einem vorhandenen JDK 17 oder 21: Ablehnen ohne Einrichtung/Ausführung, Compilerfehler, freigegebene Korrektur, erfolgreicher Neubau, Java-Bytecode-Version, JAR-Anzeige, validiertes Öffnen des Ordners, Vollzugriff und lesende Rechte. Während eines Builds werden große Uhrsprünge im Hauptprozess und Renderer simuliert; die tatsächliche Laufzeit muss korrekt bleiben. Unit-Tests prüfen außerdem Erkennung, Prüfsummen, Cache, Abbruch und unsichere Archive.
+
+`test:effort` prüft die Auswahl und Speicherung für alle vier nativen Anbieter, Modellwechsel, Chatverlauf, Neustart, die Sperre während laufender Antworten, die Darstellung im kleinen Fenster und das Ausblenden bei nicht unterstützten Modellen bzw. eigenen Endpoints. Veraltete laufende Aktionen werden beim Laden als gestoppt geprüft. Die Anbieter-Vertragstests kontrollieren die tatsächlichen SDK-Request-Parameter an einem lokalen HTTP-Server.
 
 Optional prüft `npm run build:smoke` **echte Downloads und echte Maven-/Gradle-Builds eines Spigot-Plugins**. `npm run build:smoke -- --legacy-only` prüft zusätzlich ein Java-8-Plugin mit Gradle 9 und separater neuerer Laufzeit-JVM. Diese Integrationstests benötigen Internet und laden portable JDK-/Build-Archive und Abhängigkeiten nach `.test-data/build-smoke`; sie sind nicht Teil der normalen Offline-Tests.
 

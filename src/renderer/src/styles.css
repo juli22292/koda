@@ -152,7 +152,16 @@ kbd { font: inherit; color: var(--muted); font-size: 10px; }
 .send-button:hover { background: var(--accent-hover); }
 .send-button:disabled { opacity: .35; background: var(--secondary); color: var(--surface); }
 .send-button.stop { background: var(--text); color: var(--bg); }
-.composer-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 43px; padding: 3px 6px 0; }
+.composer-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 3px 8px; min-height: 43px; padding: 3px 6px 0; }
+.composer-model-controls { display: flex; align-items: center; gap: 2px; margin-left: auto; min-width: 0; }
+.effort-button { display: flex; align-items: center; gap: 5px; padding: 7px 6px; color: var(--secondary); font-size: 10px; white-space: nowrap; border-radius: 5px; }
+.effort-button:hover { background: var(--soft); color: var(--text); }
+.effort-menu { bottom: calc(100% + 12px); right: 0; width: 245px; display: flex; flex-direction: column; }
+.effort-options { min-height: 0; overflow-y: auto; }
+.effort-options > button { display: flex; align-items: center; justify-content: space-between; padding: 10px; width: 100%; font-size: 12px; text-align: left; border-radius: 5px; }
+.effort-options > button:hover, .effort-options > button[aria-checked='true'] { background: var(--soft); }
+.effort-options small { display: block; color: var(--muted); font-size: 10px; margin-top: 4px; }
+.effort-menu > p { margin: 5px 6px 3px; padding: 10px 4px 3px; border-top: 1px solid var(--border); color: var(--muted); font-size: 10px; line-height: 1.7; }
 .composer-tools { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .permission-button { display: flex; align-items: center; gap: 5px; padding: 7px 5px; font-size: 10px; color: var(--secondary); border-radius: 5px; white-space: nowrap; }
 .permission-button:hover { background: var(--soft); color: var(--text); }

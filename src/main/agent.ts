@@ -7,6 +7,8 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { z } from 'zod'
 import { runCommand } from './commands'
 import { permissionPolicy } from '../shared/permissions'
+import { effortRequestOptions } from '../shared/effort'
+import { activityClock } from '../shared/activity-time'
 import type { BuildResult, ChatEvent, ChatRequest, ToolActivity, ProviderConfig } from '../shared/types'
 import type { Builds } from './builds'
 import { listWorkspaceFiles, readWorkspaceFile, writeWorkspaceFile, workspacePath } from './workspace'
@@ -82,20 +84,21 @@ export class Agent {
           return 'Der Nutzer hat diese Aktion abgelehnt oder gestoppt. Nicht erneut versuchen, bis er ausdrücklich darum bittet.'
         }
       }
-      const running: ToolActivity = { ...item, status: 'running', startedAt: Date.now() }
+      const elapsed = activityClock()
+      const running: ToolActivity = { ...item, status: 'running', startedAt: Date.now(), elapsedMs: 0 }
       let latestOutput: string | undefined
       emit({ type: 'tool', tool: running })
       try {
         const result = await execute(output => {
           latestOutput = output
-          if (!controller.signal.aborted) emit({ type: 'tool', tool: { ...running, output } })
+          if (!controller.signal.aborted) emit({ type: 'tool', tool: { ...running, output, elapsedMs: elapsed() } })
         })
         const output = typeof result === 'string' ? result : result.output
-        emit({ type: 'tool', tool: { ...running, status: 'done', output, artifacts: typeof result === 'string' ? undefined : result.artifacts, finishedAt: Date.now() } })
+        emit({ type: 'tool', tool: { ...running, status: 'done', output, artifacts: typeof result === 'string' ? undefined : result.artifacts, finishedAt: Date.now(), elapsedMs: elapsed() } })
         return typeof result === 'string' ? output : JSON.stringify({ success: true, ...result })
       } catch (error) {
         const output = error instanceof Error ? error.message : 'Aktion fehlgeschlagen.'
-        emit({ type: 'tool', tool: { ...running, status: controller.signal.aborted ? 'cancelled' : 'error', output: controller.signal.aborted ? latestOutput : output, finishedAt: Date.now() } })
+        emit({ type: 'tool', tool: { ...running, status: controller.signal.aborted ? 'cancelled' : 'error', output: controller.signal.aborted ? latestOutput : output, finishedAt: Date.now(), elapsedMs: elapsed() } })
         return `Fehler: ${output}`
       }
     }
@@ -130,7 +133,7 @@ export class Agent {
         tools,
         stopWhen: stepCountIs(20),
         abortSignal: controller.signal,
-        maxOutputTokens: 16384,
+        ...effortRequestOptions(request.provider, request.model, request.effort),
         maxRetries: 1,
       })
       let failure: unknown

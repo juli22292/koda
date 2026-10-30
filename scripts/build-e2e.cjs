@@ -100,8 +100,24 @@ setTimeout(()=>{try{
     assert.equal(await page.locator('.command-card.error').count(), 1)
     await page.getByRole('button', { name: 'Änderung übernehmen', exact: true }).click()
     await page.getByRole('button', { name: 'Kompilieren', exact: true }).click()
+    await until(() => page.locator('.command-card.running .terminal-output').innerText().then(text => text.includes('Live-Build mit Java')), 'No running rebuild')
+    await page.evaluate(() => {
+      window.__originalWallClock = Date.now
+      Date.now = () => window.__originalWallClock() + 7200_000
+      window.__timedBuilds = []
+      window.koda.onChatEvent(event => { if (event.type === 'tool' && event.tool.name === 'build_project') window.__timedBuilds.push(event.tool) })
+    })
+    await app.evaluate(() => { const original = Date.now; global.__originalWallClock = original; Date.now = () => original() + 3600_000 })
     await page.getByRole('button', { name: 'Im Ordner anzeigen', exact: true }).waitFor()
     await page.getByText('Plugin erfolgreich kompiliert.', { exact: true }).waitFor(); await idle()
+    const timed = await page.evaluate(() => window.__timedBuilds.findLast(tool => tool.status === 'done'))
+    assert.ok(timed.elapsedMs >= 0 && timed.elapsedMs < 15000)
+    assert.ok(timed.finishedAt - timed.startedAt > 3500_000)
+    const displayedTime = await page.locator('.command-card.done .tool-time').last().innerText()
+    assert.match(displayedTime, /^[0-9]{1,2},[0-9] s$/)
+    await app.evaluate(() => { Date.now = global.__originalWallClock })
+    await page.evaluate(() => { Date.now = window.__originalWallClock })
+    console.log('PASS native and renderer wall-clock jumps do not inflate build execution time')
     assert.equal(await fs.readFile(path.join(project, 'build-count.txt'), 'utf8'), '2')
     const compiled = await fs.readFile(path.join(project, 'build/classes/NativePlugin.class'))
     assert.equal(compiled.readUInt16BE(6), javaVersion + 44)

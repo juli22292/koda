@@ -4,6 +4,7 @@ import http from 'node:http'
 import { generateText } from 'ai'
 import { createModel, fetchModels } from '../src/main/agent'
 import { defaultSettings } from '../src/shared/providers'
+import { effortRequestOptions } from '../src/shared/effort'
 import type { ProviderConfig, ProviderId } from '../src/shared/types'
 
 let origin: string
@@ -52,3 +53,23 @@ for (const id of ['openai', 'anthropic', 'google', 'xai', 'custom'] as ProviderI
     else assert.equal(request.headers.authorization, 'Bearer test-secret')
   })
 }
+
+test('effort settings reach the native SDK request bodies for all four providers', async () => {
+  for (const sample of [
+    { id: 'openai', model: 'gpt-6.1-sol', effort: 'max' },
+    { id: 'anthropic', model: 'claude-sonnet-5-5', effort: 'max' },
+    { id: 'google', model: 'gemini-3.8-flash', effort: 'high' },
+    { id: 'google', model: 'gemini-2.5-pro', effort: 'high' },
+    { id: 'xai', model: 'grok-4.7', effort: 'xhigh' },
+  ] as const) {
+    const selected = { ...config(sample.id), model: sample.model }
+    const options = effortRequestOptions(sample.id, sample.model, sample.effort)
+    const result = await generateText({ model: createModel(selected, 'test-secret'), prompt: 'Hallo', ...options, maxRetries: 0 })
+    assert.equal(result.text, 'Hallo vom Adapter.')
+    const body = requests.at(-1)!.body as any
+    if (sample.id === 'openai' || sample.id === 'xai') assert.equal(body.reasoning.effort, sample.effort)
+    if (sample.id === 'anthropic') { assert.equal(body.output_config.effort, 'max'); assert.equal(body.thinking.type, 'adaptive'); assert.equal(body.max_tokens, 64000) }
+    if (sample.model === 'gemini-3.8-flash') { assert.equal(body.generationConfig.thinkingConfig.thinkingLevel, 'high'); assert.equal(body.generationConfig.thinkingConfig.thinkingBudget, undefined) }
+    if (sample.model === 'gemini-2.5-pro') assert.equal(body.generationConfig.thinkingConfig.thinkingBudget, 24576)
+  }
+})

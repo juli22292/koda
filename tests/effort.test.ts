@@ -10,6 +10,7 @@ test('model-specific limits exclude incompatible effort levels and unknown endpo
   assert.equal(normalizeEffort('openai', 'gpt-5.4-pro', 'low'), 'auto')
   assert.equal(normalizeEffort('openai', 'gpt-4.1', 'high'), 'auto')
   assert.equal(effortSupport('custom', 'gpt-6.1-sol'), undefined)
+  assert.equal(effortSupport('unorouter', 'gpt-6.1-sol'), undefined)
   assert.equal(effortSupport('anthropic', 'claude-sonnet-4-5'), undefined)
   assert.equal(normalizeEffort('anthropic', 'claude-opus-4-6', 'xhigh'), 'auto')
   assert.equal(normalizeEffort('anthropic', 'claude-sonnet-5-5', 'max'), 'max')

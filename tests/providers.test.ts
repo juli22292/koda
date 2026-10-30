@@ -21,7 +21,7 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify({ id: 'msg-test', type: 'message', role: 'assistant', model: body.model, content: [{ type: 'text', text: 'Hallo vom Adapter.' }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 3, output_tokens: 4 } }))
   } else if (id === 'google') {
     res.end(JSON.stringify({ responseId: 'google-test', candidates: [{ content: { role: 'model', parts: [{ text: 'Hallo vom Adapter.' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 4, totalTokenCount: 7 } }))
-  } else if (id === 'custom') {
+  } else if (id === 'custom' || id === 'unorouter') {
     res.end(JSON.stringify({ id: 'chat-test', object: 'chat.completion', created: 1, model: body.model, choices: [{ index: 0, message: { role: 'assistant', content: 'Hallo vom Adapter.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 3, completion_tokens: 4, total_tokens: 7 } }))
   } else {
     res.end(JSON.stringify({ id: 'resp-test', object: 'response', created_at: 1, status: 'completed', model: body.model, output: [{ type: 'message', id: 'message-test', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Hallo vom Adapter.', annotations: [] }] }], usage: { input_tokens: 3, output_tokens: 4, total_tokens: 7 } }))
@@ -33,7 +33,7 @@ before(async () => {
 })
 after(() => { server.closeAllConnections(); server.close() })
 const config = (id: ProviderId): ProviderConfig => ({ ...defaultSettings().providers.find(p => p.id === id)!, baseURL: `${origin}/${id}`, model: 'test-model' })
-for (const id of ['openai', 'anthropic', 'google', 'xai', 'custom'] as ProviderId[]) {
+for (const id of ['openai', 'anthropic', 'google', 'xai', 'custom', 'unorouter'] as ProviderId[]) {
   test(`${id}: SDK adapter uses native request format and parses response`, async () => {
     const result = await generateText({ model: createModel(config(id), 'test-secret'), prompt: 'Hallo', maxOutputTokens: 256, maxRetries: 0 })
     assert.equal(result.text, 'Hallo vom Adapter.')
@@ -42,7 +42,8 @@ for (const id of ['openai', 'anthropic', 'google', 'xai', 'custom'] as ProviderI
     if (id === 'anthropic') { assert.equal(request.url, '/anthropic/messages'); assert.equal(request.headers['x-api-key'], 'test-secret') }
     if (id === 'google') { assert.match(request.url, /google\/models\/test-model:generateContent/); assert.equal(request.headers['x-goog-api-key'], 'test-secret') }
     if (id === 'custom') assert.equal(request.url, '/custom/chat/completions')
-    if (id === 'openai' || id === 'xai' || id === 'custom') assert.equal(request.headers.authorization, 'Bearer test-secret')
+    if (id === 'unorouter') assert.equal(request.url, '/unorouter/chat/completions')
+    if (id === 'openai' || id === 'xai' || id === 'custom' || id === 'unorouter') assert.equal(request.headers.authorization, 'Bearer test-secret')
   })
   test(`${id}: model discovery uses correct authentication`, async () => {
     const models = await fetchModels(config(id), 'test-secret')

@@ -22,6 +22,7 @@ export function createModel(config: ProviderConfig, key: string): LanguageModel 
     case 'google': return createGoogle(options)(config.model)
     case 'xai': return createXai(options).responses(config.model)
     case 'custom': return createOpenAICompatible({ ...options, name: 'custom', apiKey: key || undefined })(config.model)
+    case 'unorouter': return createOpenAICompatible({ ...options, name: 'unorouter' })(config.model)
   }
 }
 export async function fetchModels(config: ProviderConfig, key: string): Promise<string[]> {

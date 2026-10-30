@@ -17,6 +17,7 @@
     "test:agent": "node scripts/agent-e2e.cjs",
     "test:builds": "node scripts/build-e2e.cjs",
     "test:effort": "node scripts/effort-e2e.cjs",
+    "test:unorouter": "node scripts/unorouter-e2e.cjs",
     "build:smoke": "tsx scripts/build-smoke.ts",
     "dist": "npm run build && node scripts/package.cjs",
     "dist:dir": "npm run build && electron-builder --win --x64 --dir --publish never",

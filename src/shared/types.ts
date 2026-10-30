@@ -1,4 +1,4 @@
-export type ProviderId = 'openai' | 'anthropic' | 'google' | 'xai' | 'custom'
+export type ProviderId = 'openai' | 'anthropic' | 'google' | 'xai' | 'custom' | 'unorouter'
 export type Mode = 'chat' | 'code' | 'ask'
 export type PermissionMode = 'read-only' | 'ask' | 'full-access'
 export type ReasoningEffort = 'auto' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'

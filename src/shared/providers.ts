@@ -6,6 +6,7 @@ export const PROVIDERS: { id: ProviderId; name: string; company: string; letter:
   { id: 'google', name: 'Gemini', company: 'Google', letter: 'G', color: '#6080b3', model: 'gemini-3.8-flash', baseURL: 'https://generativelanguage.googleapis.com/v1beta', keyURL: 'https://aistudio.google.com/api-keys' },
   { id: 'xai', name: 'Grok', company: 'xAI', letter: 'x', color: '#62615d', model: 'grok-4.7', baseURL: 'https://api.x.ai/v1', keyURL: 'https://console.x.ai' },
   { id: 'custom', name: 'Eigener Anbieter', company: 'OpenAI-kompatibel · z. B. Ollama', letter: '/', color: '#8a759a', model: '', baseURL: 'http://localhost:11434/v1', keyURL: '' },
+  { id: 'unorouter', name: 'UnoRouter', company: 'Ein Key für mehrere Modellanbieter', letter: 'U', color: '#497e82', model: '', baseURL: 'https://api.unorouter.com/v1', keyURL: 'https://unorouter.com/en/token' },
 ]
 export const defaultSettings = (): Settings => ({
   providers: PROVIDERS.map(p => ({ id: p.id, model: p.model, baseURL: p.baseURL, hasKey: false, models: [] })),

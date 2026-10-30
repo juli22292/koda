@@ -46,6 +46,10 @@ jobs:
         run: npm run test:effort
         env:
           KODA_TEST_EXE: release/win-unpacked/Koda.exe
+      - name: UnoRouter connection and agent tests
+        run: npm run test:unorouter
+        env:
+          KODA_TEST_EXE: release/win-unpacked/Koda.exe
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Koda-Windows-${{ github.sha }}

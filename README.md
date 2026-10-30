@@ -30,6 +30,7 @@ Benötigt Node.js 22.12+ oder 24+. `npm run preview:web` zeigt die Oberfläche i
 
 - OpenAI über die Responses API, Anthropic Claude über die Messages API, Google Gemini und xAI Grok über native SDK-Adapter.
 - Ein eigener OpenAI-kompatibler Endpoint, z. B. für Ollama, LM Studio, OpenRouter oder andere Dienste. Bei lokalen Endpoints ist kein API-Key erforderlich.
+- UnoRouter als zusätzlicher Anbieter mit eigenem verschlüsseltem Key, Modellabfrage, Streaming und Werkzeugaufrufen.
 - Frei einstellbare Modell-IDs; Modelllisten werden mit dem eigenen Konto geladen.
 - Effort-Auswahl neben dem Modell mit den jeweils unterstützten Stufen. Die Auswahl wird pro Modell und im Chat gespeichert.
 - Streaming-Chat, Markdown, hervorgehobene Codeblöcke und Kopieren.
@@ -48,6 +49,16 @@ Benötigt Node.js 22.12+ oder 24+. `npm run preview:web` zeigt die Oberfläche i
 - Installationsassistent und automatische Update-Prüfung beim Start sowie jede Minute.
 - Ein Update-Symbol direkt links neben „Minimieren“, sobald eine neuere Version verfügbar ist. Anklicken lädt das Update; nach erfolgreichem Download startet ein weiterer Klick Koda neu und installiert es.
 - Laufende Antworten verhindern den Update-Neustart. Chats werden vor dem Neustart gespeichert; ein offener Entwurf wird nach dem Neustart wiederhergestellt.
+
+## UnoRouter verbinden
+
+Unter **Einstellungen → Modelle & API-Keys → UnoRouter** (direkt nach „Eigener“) einen [UnoRouter-Key](https://unorouter.com/en/token) einfügen und **Verbindung prüfen** klicken. Koda lädt die Modell-IDs über `https://api.unorouter.com/v1/models`. Ein Chat-Modell aus der Liste auswählen und **Speichern** klicken; anschließend ist es in der Modellauswahl unter UnoRouter verfügbar. Die Modell-ID wird unverändert übertragen, auch bei IDs mit `/` oder `:free`.
+
+UnoRouter verwendet die OpenAI-kompatible Chat-Completions-API unter `https://api.unorouter.com/v1/chat/completions` mit Bearer-Authentifizierung. Streaming und mehrstufige Werkzeugaufrufe verwenden denselben lokalen Coding-Agent wie die übrigen Anbieter. Für Dateiänderungen, Befehle und Builds muss das gewählte Modell Werkzeugaufrufe unterstützen. Freie Modelle, verfügbare Routen und Kontolimits werden von UnoRouter bestimmt. Ein bestandener Verbindungstest prüft Anmeldung und Modellliste, keine kostenpflichtige Generierung.
+
+Der UnoRouter-Key ist getrennt von „Eigener Anbieter“ und anderen Keys verschlüsselt gespeichert. Ein bestehendes Profil wird um den zusätzlichen Anbieter ergänzt. UnoRouter ist ein externer Modell-Router; Anfragen und Kontext gehen an UnoRouter und dessen ausgewählten Modellanbieter. Für UnoRouter wird keine native Effort-Unterstützung allein aus dem Modellnamen abgeleitet.
+
+Referenz: [Offizielle UnoRouter-Anleitung für OpenAI-kompatible Coding-Clients](https://unorouter.com/en/docs/integrations/cline).
 
 ## Effort auswählen
 
@@ -128,15 +139,18 @@ npm run test:e2e
 npm run test:agent
 npm run test:builds
 npm run test:effort
+npm run test:unorouter
 npm run test:updates
 npm run dist
 ```
 
-Die Tests verwenden ausschließlich lokale HTTP-Testanbieter und temporäre Projektordner. Die End-to-End-Tests starten die echte Electron-App und prüfen Key-Verschlüsselung, Dateizugriff, Streaming, mehrstufige Werkzeugaufrufe, Freigaben, Ablehnen, Stoppen, Fehlerbehandlung und Verlauf. `test:agent` prüft zusätzlich Vollzugriff, lesende Rechte, Live-Ausgabe und Animation, das Stoppen von Kindprozessen, gespeicherte Rechte, Begrüßungen nach lokaler Tageszeit sowie gesperrte Reload-Tastenkürzel während eines laufenden Befehls. Anbieter-Vertragstests prüfen die nativen Request- und Response-Formate aller fünf Adapter. Update-Tests prüfen außerdem Symbolposition, Verfügbarkeit, Offline-Fälle, einen echten Download, die Ablehnung eines falschen Hashes, einen erneuten Download, den Neustartschutz und den Erhalt von Chat und Entwurf. Der Test-Installer wird heruntergeladen, aber nicht ausgeführt. Kostenpflichtige Live-Anfragen werden nicht ausgeführt.
+Die Tests verwenden ausschließlich lokale HTTP-Testanbieter und temporäre Projektordner. Die End-to-End-Tests starten die echte Electron-App und prüfen Key-Verschlüsselung, Dateizugriff, Streaming, mehrstufige Werkzeugaufrufe, Freigaben, Ablehnen, Stoppen, Fehlerbehandlung und Verlauf. `test:agent` prüft zusätzlich Vollzugriff, lesende Rechte, Live-Ausgabe und Animation, das Stoppen von Kindprozessen, gespeicherte Rechte, Begrüßungen nach lokaler Tageszeit sowie gesperrte Reload-Tastenkürzel während eines laufenden Befehls. Anbieter-Vertragstests prüfen die Request- und Response-Formate aller sechs Adapter. Update-Tests prüfen außerdem Symbolposition, Verfügbarkeit, Offline-Fälle, einen echten Download, die Ablehnung eines falschen Hashes, einen erneuten Download, den Neustartschutz und den Erhalt von Chat und Entwurf. Der Test-Installer wird heruntergeladen, aber nicht ausgeführt. Kostenpflichtige Live-Anfragen werden nicht ausgeführt.
 
 `test:builds` prüft den kompletten Build-Chat mit einem lokalen Modell-Testserver und einem vorhandenen JDK 17 oder 21: Ablehnen ohne Einrichtung/Ausführung, Compilerfehler, freigegebene Korrektur, erfolgreicher Neubau, Java-Bytecode-Version, JAR-Anzeige, validiertes Öffnen des Ordners, Vollzugriff und lesende Rechte. Während eines Builds werden große Uhrsprünge im Hauptprozess und Renderer simuliert; die tatsächliche Laufzeit muss korrekt bleiben. Unit-Tests prüfen außerdem Erkennung, Prüfsummen, Cache, Abbruch und unsichere Archive.
 
 `test:effort` prüft die Auswahl und Speicherung für alle vier nativen Anbieter, Modellwechsel, Chatverlauf, Neustart, die Sperre während laufender Antworten, die Darstellung im kleinen Fenster und das Ausblenden bei nicht unterstützten Modellen bzw. eigenen Endpoints. Veraltete laufende Aktionen werden beim Laden als gestoppt geprüft. Die Anbieter-Vertragstests kontrollieren die tatsächlichen SDK-Request-Parameter an einem lokalen HTTP-Server.
+
+`test:unorouter` prüft die Migration eines 0.2.5-Profils, den zusätzlichen Anbieter, getrennte Key-Verschlüsselung, die Modellabfrage mit gültigem/ungültigem Key, echte Chat-Completions-Streams und fragmentierte Werkzeugaufrufe gegen einen lokalen HTTP-Testserver. Dateiänderungen erfolgen erst nach Freigabe; ein nativer Neustart prüft gespeicherte Keys, Modelle und Chats. Dabei werden keine echten UnoRouter-Generierungen ausgeführt.
 
 Optional prüft `npm run build:smoke` **echte Downloads und echte Maven-/Gradle-Builds eines Spigot-Plugins**. `npm run build:smoke -- --legacy-only` prüft zusätzlich ein Java-8-Plugin mit Gradle 9 und separater neuerer Laufzeit-JVM. Diese Integrationstests benötigen Internet und laden portable JDK-/Build-Archive und Abhängigkeiten nach `.test-data/build-smoke`; sie sind nicht Teil der normalen Offline-Tests.
 

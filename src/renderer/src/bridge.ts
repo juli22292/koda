@@ -4,15 +4,19 @@ import { defaultSettings } from '../../shared/providers'
 // Browser preview stores appearance and chat metadata only. Keys and native operations require Electron.
 const previewOnly = async (): Promise<never> => { throw new Error('Diese Funktion ist in der Koda-Desktop-App verfügbar.') }
 const read = <T>(key: string, fallback: T): T => { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback } catch { return fallback } }
+const previewSettings = (): Settings => {
+  const saved = read<Settings>('koda-preview-settings', defaultSettings())
+  return { ...saved, providers: defaultSettings().providers.map(provider => ({ ...provider, ...saved.providers?.find(item => item.id === provider.id) })) }
+}
 const preview: KodaBridge = {
   desktop: false,
   getUpdateState: async () => ({ status: 'unsupported', currentVersion: __APP_VERSION__ }),
   checkForUpdates: async () => ({ status: 'unsupported', currentVersion: __APP_VERSION__ }),
   downloadUpdate: previewOnly, installUpdate: previewOnly,
   onUpdateState: () => () => {},
-  getSettings: async () => read<Settings>('koda-preview-settings', defaultSettings()),
+  getSettings: async () => previewSettings(),
   saveSettings: async patch => {
-    const settings = { ...read<Settings>('koda-preview-settings', defaultSettings()), ...patch }
+    const settings = { ...previewSettings(), ...patch }
     localStorage.setItem('koda-preview-settings', JSON.stringify(settings))
     return settings
   },

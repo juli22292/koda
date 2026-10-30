@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, type Ipc
 import path from 'node:path'
 import { promises as fs } from 'node:fs'
 import { Store } from './store'
-import { Agent, fetchModels } from './agent'
+import { Agent, fetchModelCatalog } from './agent'
 import { listWorkspaceFiles, readWorkspaceFile, isSensitive, workspacePath } from './workspace'
 import electronUpdater from 'electron-updater'
 import { UpdateManager } from './updates'
@@ -39,9 +39,9 @@ function registerIPC() {
   handle('provider:test', async (id: ProviderId) => {
     const config = store.publicSettings().providers.find(p => p.id === id)
     if (!config) throw new Error('Unbekannter Anbieter.')
-    const models = await fetchModels(config, store.key(id))
-    await store.setModels(id, models)
-    return { models }
+    const catalog = await fetchModelCatalog(config, store.key(id))
+    await store.setModels(id, catalog.models, catalog.modelCapabilities)
+    return { ...catalog, modelCapabilities: store.publicSettings().providers.find(provider => provider.id === id)!.modelCapabilities }
   })
   handle('data:get', () => store.data)
   handle('data:save', data => store.saveData(data))

@@ -59,7 +59,7 @@ export function Settings({ settings, initialProvider, initialSection, onUpdate, 
       onUpdate(updated)
       if (test) {
         const result = await bridge.testProvider(provider)
-        onUpdate({ ...updated, providers: updated.providers.map(p => p.id === provider ? { ...p, models: result.models } : p) })
+        onUpdate({ ...updated, providers: updated.providers.map(p => p.id === provider ? { ...p, models: result.models, modelCapabilities: result.modelCapabilities } : p) })
         setModelSearch('')
         setModelsTested(true)
         setStatus({ success: true, text: `Verbindung steht. ${result.models.length} ${result.models.length === 1 ? 'Modell' : 'Modelle'} verfügbar.` })

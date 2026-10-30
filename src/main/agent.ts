@@ -7,9 +7,9 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { z } from 'zod'
 import { runCommand } from './commands'
 import { permissionPolicy } from '../shared/permissions'
-import { effortRequestOptions } from '../shared/effort'
+import { effortErrorCapabilities, effortRequestOptions, parseModelCapabilities } from '../shared/effort'
 import { activityClock } from '../shared/activity-time'
-import type { BuildResult, ChatEvent, ChatRequest, ToolActivity, ProviderConfig } from '../shared/types'
+import type { BuildResult, ChatEvent, ChatRequest, ToolActivity, ProviderConfig, ModelCapabilities } from '../shared/types'
 import type { Builds } from './builds'
 import { listWorkspaceFiles, readWorkspaceFile, writeWorkspaceFile, workspacePath } from './workspace'
 import type { Store } from './store'
@@ -26,6 +26,9 @@ export function createModel(config: ProviderConfig, key: string): LanguageModel 
   }
 }
 export async function fetchModels(config: ProviderConfig, key: string): Promise<string[]> {
+  return (await fetchModelCatalog(config, key)).models
+}
+export async function fetchModelCatalog(config: ProviderConfig, key: string): Promise<{ models: string[]; modelCapabilities: Record<string, ModelCapabilities> }> {
   if (!key && config.id !== 'custom') throw new Error('Bitte zuerst einen API-Key speichern.')
   const url = `${config.baseURL}/models${config.id === 'google' ? '?pageSize=1000' : ''}`
   const headers: Record<string, string> = config.id === 'anthropic'
@@ -33,10 +36,16 @@ export async function fetchModels(config: ProviderConfig, key: string): Promise<
     : config.id === 'google' ? { 'x-goog-api-key': key } : key ? { Authorization: `Bearer ${key}` } : {}
   const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000), redirect: 'error' })
   if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? 'Der API-Key wurde nicht akzeptiert. Prüfe Key und Berechtigungen.' : `Der Anbieter antwortet mit HTTP ${response.status}.`)
-  const body = await response.json() as { data?: { id: string }[]; models?: { name: string; supportedGenerationMethods?: string[] }[] }
-  return (config.id === 'google'
+  const body = await response.json() as { data?: { id: string; [key: string]: unknown }[]; models?: { name: string; supportedGenerationMethods?: string[] }[] }
+  const models = (config.id === 'google'
     ? body.models?.filter(m => !m.supportedGenerationMethods || m.supportedGenerationMethods.includes('generateContent')).map(m => m.name.replace(/^models\//, ''))
     : body.data?.map(m => m.id))?.filter(id => typeof id === 'string').sort() ?? []
+  const modelCapabilities: Record<string, ModelCapabilities> = Object.create(null)
+  if (config.id === 'unorouter' || config.id === 'custom') for (const item of body.data || []) {
+    const capabilities = parseModelCapabilities(item)
+    if (typeof item.id === 'string' && capabilities) modelCapabilities[item.id] = capabilities
+  }
+  return { models, modelCapabilities }
 }
 interface Run { controller: AbortController; approvals: Map<string, (approved: boolean) => void> }
 export class Agent {
@@ -134,7 +143,7 @@ export class Agent {
         tools,
         stopWhen: stepCountIs(20),
         abortSignal: controller.signal,
-        ...effortRequestOptions(request.provider, request.model, request.effort),
+        ...effortRequestOptions(request.provider, request.model, request.effort, config),
         maxRetries: 1,
       })
       let failure: unknown
@@ -151,7 +160,13 @@ export class Agent {
       else {
         let message = error instanceof Error ? error.message : 'Die Anfrage ist fehlgeschlagen.'
         if (key) message = message.replaceAll(key, '[API-Key]')
-        if (/401|incorrect.*key|unauthorized|authentication/i.test(message)) message = 'Der API-Key wurde nicht akzeptiert. Bitte prüfe deine Einstellungen.'
+        const capabilities = (config.id === 'custom' || config.id === 'unorouter') ? effortErrorCapabilities(message) : undefined
+        if (capabilities) {
+          await this.store.setModelCapabilities(config.id, request.model, capabilities)
+          this.emit({ type: 'model-capabilities', requestId: request.requestId, provider: config.id, model: request.model, capabilities })
+          message = `Die Modellroute hat die Effort-Stufe abgelehnt. Das Effort-Menü wurde aktualisiert. Wähle eine unterstützte Stufe und sende erneut. Unterstützt: ${capabilities.effortLevels!.join(', ')}.`
+        }
+        else if (/401|incorrect.*key|unauthorized|authentication/i.test(message)) message = 'Der API-Key wurde nicht akzeptiert. Bitte prüfe deine Einstellungen.'
         else if (/429|quota|rate.limit|credit|billing/i.test(message)) message = 'Dein Anbieter meldet ein Limit oder fehlendes Guthaben. Prüfe dein API-Konto und versuche es erneut.'
         else if (/fetch failed|ECONNREFUSED|ENOTFOUND/i.test(message)) message = 'Der Anbieter ist nicht erreichbar. Prüfe Internetverbindung und Endpoint.'
         this.emit({ type: 'error', requestId: request.requestId, error: message.slice(0, 1200) })

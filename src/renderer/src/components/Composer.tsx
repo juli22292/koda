@@ -64,7 +64,7 @@ export function Composer(props: Props) {
         {mode === 'code' && <PermissionPicker value={props.permissions} disabled={busy} onChange={props.onPermissions} onOpen={() => { setModelMenu(false); setModeMenu(false) }}/>}
       </div>
       <div className="composer-model-controls">
-      {connected && <EffortPicker provider={provider} model={model} value={props.effort} disabled={busy} onChange={props.onEffort} onOpen={() => { setModelMenu(false); setModeMenu(false) }}/>}
+      {connected && <EffortPicker provider={provider} model={model} config={settings.providers.find(item => item.id === provider)!} value={props.effort} disabled={busy} onChange={props.onEffort} onOpen={() => { setModelMenu(false); setModeMenu(false) }}/>}
       <div className="menu-anchor model-anchor" ref={modelAnchor}>
         <button className="model-button" onClick={() => { setModelMenu(!modelMenu); setModeMenu(false); setQuery('') }} aria-expanded={modelMenu}><span className={`model-state ${connected ? 'ready' : ''}`}/><span>{connected ? modelLabel(model) : 'Modell wählen'}</span><ChevronDown size={12}/></button>
         {modelMenu && <div className="dropdown model-menu" style={{ maxHeight: menuMaxHeight }}><div className="model-menu-heading"><span>Modell auswählen</span><button className="icon-button" title="Modelle verwalten" onClick={() => { setModelMenu(false); props.onSettings() }}><Settings2 size={14}/></button></div><input autoFocus className="model-search" placeholder="Modell suchen …" aria-label="Modelle suchen" value={query} onChange={e => setQuery(e.target.value)}/><div className="model-menu-list">{PROVIDERS.map(p => {

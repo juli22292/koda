@@ -2,7 +2,7 @@ import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { generateText } from 'ai'
-import { createModel, fetchModels } from '../src/main/agent'
+import { createModel, fetchModelCatalog, fetchModels } from '../src/main/agent'
 import { defaultSettings } from '../src/shared/providers'
 import { effortRequestOptions } from '../src/shared/effort'
 import type { ProviderConfig, ProviderId } from '../src/shared/types'
@@ -16,7 +16,7 @@ const server = http.createServer(async (req, res) => {
   const id = req.url!.split('/')[1]
   res.writeHead(200, { 'Content-Type': 'application/json' })
   if (req.method === 'GET') {
-    res.end(JSON.stringify(id === 'google' ? { models: [{ name: 'models/gemini-test', supportedGenerationMethods: ['generateContent'] }, { name: 'models/embedding-test', supportedGenerationMethods: ['embedContent'] }] } : { data: [{ id: 'test-model' }] }))
+    res.end(JSON.stringify(id === 'google' ? { models: [{ name: 'models/gemini-test', supportedGenerationMethods: ['generateContent'] }, { name: 'models/embedding-test', supportedGenerationMethods: ['embedContent'] }] } : { data: [{ id: 'test-model', ...(id === 'unorouter' ? { metadata: { reasoningEfforts: ['low', 'xhigh'], maxOutputTokens: 4096 } } : {}) }] }))
   } else if (id === 'anthropic') {
     res.end(JSON.stringify({ id: 'msg-test', type: 'message', role: 'assistant', model: body.model, content: [{ type: 'text', text: 'Hallo vom Adapter.' }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 3, output_tokens: 4 } }))
   } else if (id === 'google') {
@@ -54,6 +54,22 @@ for (const id of ['openai', 'anthropic', 'google', 'xai', 'custom', 'unorouter']
     else assert.equal(request.headers.authorization, 'Bearer test-secret')
   })
 }
+
+test('UnoRouter catalog retains explicit reasoning levels and output limits', async () => {
+  const catalog = await fetchModelCatalog(config('unorouter'), 'test-secret')
+  assert.deepEqual(catalog.modelCapabilities['test-model'], { effortLevels: ['low', 'xhigh'], maxOutputTokens: 4096 })
+})
+
+test('UnoRouter effort uses the Chat Completions field and respects the Qwen route limit', async () => {
+  for (const effort of ['auto', 'low', 'medium', 'xhigh'] as const) {
+    const selected = { ...config('unorouter'), model: 'qwen3.8-27b:free' }
+    await generateText({ model: createModel(selected, 'test-secret'), prompt: 'Hallo', ...effortRequestOptions('unorouter', selected.model, effort, selected), maxRetries: 0 })
+    const body = requests.at(-1)!.body
+    assert.equal(body.reasoning_effort, effort === 'auto' ? 'xhigh' : effort)
+    assert.ok(Number(body.max_tokens) <= 32768)
+    assert.equal(body.thinking, undefined); assert.equal(body.reasoning, undefined)
+  }
+})
 
 test('effort settings reach the native SDK request bodies for all four providers', async () => {
   for (const sample of [

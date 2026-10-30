@@ -4,7 +4,7 @@ import type { AppData, AppUpdateState, Attachment, ChatEvent, Conversation, Mess
 import { defaultSettings, isConfigured, modelLabel } from '../../shared/providers'
 import { bridge } from './bridge'
 import { greetingForHour } from '../../shared/greeting'
-import { effortKey, normalizeEffort } from '../../shared/effort'
+import { effortKey, normalizeSettingsEffort } from '../../shared/effort'
 import { Mark } from './components/Brand'
 import { Settings } from './components/Settings'
 import { Composer } from './components/Composer'
@@ -60,7 +60,7 @@ export default function App() {
   const [copied, setCopied] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
-  const stateRef = useRef({ settingsOpen, selectedId }); stateRef.current = { settingsOpen, selectedId }
+  const stateRef = useRef({ settingsOpen, selectedId, provider, model }); stateRef.current = { settingsOpen, selectedId, provider, model }
   const conversation = data.conversations.find(c => c.id === selectedId)
   const selectedProject = data.projects.find(p => p.id === (conversation?.projectId ?? projectId))
   const configured = settings.providers.filter(isConfigured)
@@ -81,7 +81,7 @@ export default function App() {
       setSettings(settings); setData(data)
       const initial = settings.providers.find(p => p.id === settings.defaultProvider)!
       const selected = isConfigured(initial) ? initial : settings.providers.find(isConfigured) || initial
-      setProvider(selected.id); setModel(selected.model); setEffort(normalizeEffort(selected.id, selected.model, settings.effortPreferences?.[effortKey(selected.id, selected.model)]))
+      setProvider(selected.id); setModel(selected.model); setEffort(normalizeSettingsEffort(settings, selected.id, selected.model, settings.effortPreferences?.[effortKey(selected.id, selected.model)]))
       try {
         const saved = localStorage.getItem('koda-restart-session')
         if (saved) {
@@ -91,7 +91,7 @@ export default function App() {
           if (settings.providers.some(p => p.id === session.provider)) { setProvider(session.provider); if (typeof session.model === 'string') setModel(session.model) }
           if (session.mode === 'chat' || session.mode === 'code' || session.mode === 'ask') setMode(session.mode)
           if (['read-only', 'ask', 'full-access'].includes(session.permissions)) setPermissions(session.permissions)
-          if (session.effort) setEffort(normalizeEffort(session.provider || selected.id, session.model || selected.model, session.effort))
+          if (session.effort) setEffort(normalizeSettingsEffort(settings, session.provider || selected.id, session.model || selected.model, session.effort))
           if (typeof session.draft === 'string') setDraft(session.draft)
           if (Array.isArray(session.attachments)) setAttachments(session.attachments)
           if (['workspace', 'projects', 'history'].includes(session.view)) setView(session.view)
@@ -115,6 +115,11 @@ export default function App() {
   useEffect(() => bridge.onChatEvent((event: ChatEvent) => {
     const active = activeRef.current
     if (!active || event.requestId !== active.requestId) return
+    if (event.type === 'model-capabilities') {
+      setSettings(current => ({ ...current, providers: current.providers.map(config => config.id === event.provider ? { ...config, modelCapabilities: { ...config.modelCapabilities, [event.model]: { ...config.modelCapabilities?.[event.model], ...event.capabilities } } } : config) }))
+      if (stateRef.current.provider === event.provider && stateRef.current.model === event.model) setEffort('auto')
+      return
+    }
     setData(current => ({ ...current, conversations: current.conversations.map(c => {
       if (c.id !== active.conversationId) return c
       if (event.type === 'done') return { ...c, apiMessages: event.apiMessages, tokens: (c.tokens || 0) + event.tokens, updatedAt: Date.now() }
@@ -134,10 +139,10 @@ export default function App() {
     if (autoScroll && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [conversation?.messages, autoScroll])
   const newChat = useCallback((project?: string) => {
-    setPermissions('ask'); setEffort(normalizeEffort(provider, model, settings.effortPreferences?.[effortKey(provider, model)])); setSelectedId(null); setView('workspace'); setProjectId(project); setDraft(''); setAttachments([]); setQuery(''); setAutoScroll(true); setMoreOpen(false); setFocusKey(v => v + 1)
-  }, [provider, model, settings.effortPreferences])
+    setPermissions('ask'); setEffort(normalizeSettingsEffort(settings, provider, model, settings.effortPreferences?.[effortKey(provider, model)])); setSelectedId(null); setView('workspace'); setProjectId(project); setDraft(''); setAttachments([]); setQuery(''); setAutoScroll(true); setMoreOpen(false); setFocusKey(v => v + 1)
+  }, [provider, model, settings])
   const selectChat = (chat: Conversation) => {
-    setSelectedId(chat.id); setView('workspace'); setProjectId(chat.projectId); setProvider(chat.provider); setModel(chat.model); setMode(chat.mode); setPermissions(chat.permissions || 'ask'); setEffort(normalizeEffort(chat.provider, chat.model, chat.effort ?? settings.effortPreferences?.[effortKey(chat.provider, chat.model)])); setDraft(''); setAttachments([]); setAutoScroll(true); setMoreOpen(false)
+    setSelectedId(chat.id); setView('workspace'); setProjectId(chat.projectId); setProvider(chat.provider); setModel(chat.model); setMode(chat.mode); setPermissions(chat.permissions || 'ask'); setEffort(normalizeSettingsEffort(settings, chat.provider, chat.model, chat.effort ?? settings.effortPreferences?.[effortKey(chat.provider, chat.model)])); setDraft(''); setAttachments([]); setAutoScroll(true); setMoreOpen(false)
   }
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
@@ -175,12 +180,12 @@ export default function App() {
     const previous = conversation?.messages || []
     const messages = [...previous, user]
     const apiMessages = conversation?.apiMessages?.length && conversation.provider === provider && conversation.model === model && conversation.mode === mode && (conversation.permissions || 'ask') === permissions ? [...conversation.apiMessages, { role: 'user', content: withAttachments(user) }] : undefined
-    const chat: Conversation = { ...conversation, id, title: conversation?.title || draft.trim().split('\n')[0].slice(0, 65), projectId: conversation?.projectId ?? projectId, provider, model, mode, permissions, effort: normalizeEffort(provider, model, effort), messages: [...messages, assistant], apiMessages: undefined, updatedAt: now }
+    const chat: Conversation = { ...conversation, id, title: conversation?.title || draft.trim().split('\n')[0].slice(0, 65), projectId: conversation?.projectId ?? projectId, provider, model, mode, permissions, effort: normalizeSettingsEffort(settings, provider, model, effort), messages: [...messages, assistant], apiMessages: undefined, updatedAt: now }
     const run = { requestId, conversationId: id, messageId: assistantId }
     activeRef.current = run; setActiveRun(run); setSelectedId(id); setAutoScroll(true); setView('workspace'); setDraft(''); setAttachments([])
     setData(current => ({ ...current, conversations: [chat, ...current.conversations.filter(c => c.id !== id)] }))
     try {
-      await bridge.startChat({ requestId, conversationId: id, provider, model, mode, permissions, effort: normalizeEffort(provider, model, effort), projectId: chat.projectId, messages: messages.filter(m => m.content).map(m => ({ role: m.role, content: withAttachments(m) })), apiMessages })
+      await bridge.startChat({ requestId, conversationId: id, provider, model, mode, permissions, effort: normalizeSettingsEffort(settings, provider, model, effort), projectId: chat.projectId, messages: messages.filter(m => m.content).map(m => ({ role: m.role, content: withAttachments(m) })), apiMessages })
     } catch (error) {
       setData(current => ({ ...current, conversations: current.conversations.map(c => c.id !== id ? c : { ...c, messages: c.messages.map(m => m.id === assistantId ? { ...m, error: errorText(error) } : m) }) }))
       activeRef.current = null; setActiveRun(null)
@@ -205,17 +210,17 @@ export default function App() {
     if (selectedId) setData(current => ({ ...current, conversations: current.conversations.map(chat => chat.id === selectedId ? { ...chat, permissions: next, apiMessages: undefined } : chat) }))
   }
   const chooseEffort = (value: ReasoningEffort) => {
-    const next = normalizeEffort(provider, model, value), key = effortKey(provider, model)
+    const next = normalizeSettingsEffort(settings, provider, model, value), key = effortKey(provider, model)
     setEffort(next)
     setSettings(current => ({ ...current, effortPreferences: { ...current.effortPreferences, [key]: next } }))
     if (selectedId) setData(current => ({ ...current, conversations: current.conversations.map(chat => chat.id === selectedId && chat.provider === provider && chat.model === model ? { ...chat, effort: next } : chat) }))
     void bridge.saveSettings({ effortPreferences: { [key]: next } }).then(setSettings).catch(error => notify(errorText(error)))
   }
   const selectModel = (id: ProviderId, nextModel: string) => {
-    setProvider(id); setModel(nextModel); setEffort(normalizeEffort(id, nextModel, settings.effortPreferences?.[effortKey(id, nextModel)]))
+    setProvider(id); setModel(nextModel); setEffort(normalizeSettingsEffort(settings, id, nextModel, settings.effortPreferences?.[effortKey(id, nextModel)]))
   }
   const greeting = greetingForHour(localTime.getHours())
-  const composer = <Composer draft={draft} onDraft={setDraft} attachments={attachments} onRemoveAttachment={index => setAttachments(a => a.filter((_, i) => i !== index))} onAttach={() => void attachFiles()} project={selectedProject} onProject={() => selectedProject ? setFilesOpen(v => !v) : void openProject()} mode={mode} onMode={chooseMode} permissions={permissions} onPermissions={choosePermissions} effort={normalizeEffort(provider, model, effort)} onEffort={chooseEffort} provider={provider} model={model} settings={settings} onSelectModel={selectModel} onSettings={openSettings} onSend={() => void send()} onStop={() => { if (activeRef.current) void bridge.stopChat(activeRef.current.requestId).catch(error => notify(errorText(error))) }} busy={!!activeRun} compact={!!conversation} focusKey={focusKey}/>
+  const composer = <Composer draft={draft} onDraft={setDraft} attachments={attachments} onRemoveAttachment={index => setAttachments(a => a.filter((_, i) => i !== index))} onAttach={() => void attachFiles()} project={selectedProject} onProject={() => selectedProject ? setFilesOpen(v => !v) : void openProject()} mode={mode} onMode={chooseMode} permissions={permissions} onPermissions={choosePermissions} effort={normalizeSettingsEffort(settings, provider, model, effort)} onEffort={chooseEffort} provider={provider} model={model} settings={settings} onSelectModel={selectModel} onSettings={openSettings} onSend={() => void send()} onStop={() => { if (activeRef.current) void bridge.stopChat(activeRef.current.requestId).catch(error => notify(errorText(error))) }} busy={!!activeRun} compact={!!conversation} focusKey={focusKey}/>
   if (loadError) return <div className="startup-error"><Mark size={36}/><h2>Koda konnte deine Daten nicht laden.</h2><p>{loadError}</p><button className="button secondary" onClick={() => window.location.reload()}>Erneut versuchen</button></div>
   return <div className="app-shell" style={{ '--chat-font-size': `${settings.fontSize}px` } as CSSProperties}>
     <Titlebar sidebar={sidebar} onToggleSidebar={() => setSidebar(v => !v)} mode={mode} onMode={chooseMode} update={updateState} busy={!!activeRun} beforeRestart={beforeRestart} notify={notify}/>
@@ -230,7 +235,7 @@ export default function App() {
       </main>
       {filesOpen && <FilePanel project={selectedProject} revision={fileRevision} onClose={() => setFilesOpen(false)} onAttach={file => { setAttachments(a => [...a, file].slice(0, 10)); notify(`${file.name} als Kontext hinzugefügt.`) }} notify={notify} onOpenProject={() => void openProject()}/>}
     </div>
-    {settingsOpen && <Settings settings={settings} initialProvider={initialProvider} initialSection={settingsSection} onUpdate={updated => { setSettings(updated); const chosen = updated.providers.find(p => p.id === provider)!; if (chosen.model !== settings.providers.find(p => p.id === provider)?.model) { setModel(chosen.model); setEffort(normalizeEffort(provider, chosen.model, updated.effortPreferences?.[effortKey(provider, chosen.model)])) }; if (!configured.length) { const newlyConfigured = updated.providers.find(isConfigured); if (newlyConfigured) { setProvider(newlyConfigured.id); setModel(newlyConfigured.model); setEffort(normalizeEffort(newlyConfigured.id, newlyConfigured.model, updated.effortPreferences?.[effortKey(newlyConfigured.id, newlyConfigured.model)])) } } }} onClose={() => setSettingsOpen(false)} notify={notify}/>}
+    {settingsOpen && <Settings settings={settings} initialProvider={initialProvider} initialSection={settingsSection} onUpdate={updated => { setSettings(updated); const chosen = updated.providers.find(p => p.id === provider)!; if (chosen.model !== settings.providers.find(p => p.id === provider)?.model) { setModel(chosen.model); setEffort(normalizeSettingsEffort(updated, provider, chosen.model, updated.effortPreferences?.[effortKey(provider, chosen.model)])) }; if (!configured.length) { const newlyConfigured = updated.providers.find(isConfigured); if (newlyConfigured) { setProvider(newlyConfigured.id); setModel(newlyConfigured.model); setEffort(normalizeSettingsEffort(updated, newlyConfigured.id, newlyConfigured.model, updated.effortPreferences?.[effortKey(newlyConfigured.id, newlyConfigured.model)])) } } }} onClose={() => setSettingsOpen(false)} notify={notify}/>}
     {deleteTarget && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setDeleteTarget(null) }}><div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-title"><span className="delete-icon"><Trash2 size={23}/></span><h2 id="delete-title">Diesen Chat löschen?</h2><p>Der lokale Verlauf dieses Gesprächs wird entfernt. Projektdateien bleiben erhalten.</p><div><button className="button secondary" autoFocus onClick={() => setDeleteTarget(null)}>Abbrechen</button><button className="button danger-button" onClick={deleteChat}>Chat löschen</button></div></div></div>}
     {toast && <div className="toast" role="status"><span>{toast}</span><button aria-label="Hinweis schließen" onClick={() => setToast('')}><X size={14}/></button></div>}
   </div>

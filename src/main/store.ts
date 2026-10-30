@@ -1,7 +1,7 @@
 import { app, safeStorage } from 'electron'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import type { AppData, ProviderId, Settings } from '../shared/types'
+import type { AppData, ModelCapabilities, ProviderId, Settings } from '../shared/types'
 import { defaultSettings, PROVIDERS } from '../shared/providers'
 import { normalizeEffort } from '../shared/effort'
 import { restoreInterruptedActivities } from '../shared/activity-time'
@@ -52,7 +52,7 @@ export class Store {
       for (const [key, value] of Object.entries(patch.effortPreferences).slice(0, 300)) {
         const separator = key.indexOf(':')
         const provider = key.slice(0, separator) as ProviderId, model = key.slice(separator + 1)
-        if (separator > 0 && model.length <= 200 && PROVIDERS.some(item => item.id === provider)) preferences[key] = normalizeEffort(provider, model, value)
+        if (separator > 0 && model.length <= 200 && PROVIDERS.some(item => item.id === provider)) preferences[key] = normalizeEffort(provider, model, value, this.settings.providers.find(item => item.id === provider))
       }
       this.settings.effortPreferences = Object.fromEntries(Object.entries(preferences).slice(-300))
     }
@@ -69,7 +69,7 @@ export class Store {
     if (typeof config.model !== 'string' || config.model.length > 200) throw new Error('Ungültige Modell-ID.')
     // Branded providers never send a saved key to a user-supplied host.
     if (id !== 'custom' && endpoint.origin !== new URL(PROVIDERS.find(p => p.id === id)!.baseURL).origin) throw new Error('Für eigene Endpoints bitte „Eigener Anbieter“ verwenden.')
-    if (config.apiKey?.trim() || current.baseURL !== config.baseURL.replace(/\/+$/, '')) current.models = []
+    if (config.apiKey?.trim() || current.baseURL !== config.baseURL.replace(/\/+$/, '')) { current.models = []; current.modelCapabilities = {} }
     if (config.apiKey?.trim()) {
       if (!safeStorage.isEncryptionAvailable()) throw new Error('API-Keys können ohne Windows-Verschlüsselung nicht gespeichert werden.')
       this.settings.secrets[id] = safeStorage.encryptString(config.apiKey.trim()).toString('base64')
@@ -83,11 +83,19 @@ export class Store {
     delete this.settings.secrets[id]
     const config = this.settings.providers.find(p => p.id === id)!
     config.models = []
+    config.modelCapabilities = {}
     await this.write('settings.json', this.settings)
     return this.publicSettings().providers.find(p => p.id === id)!
   }
-  async setModels(id: ProviderId, models: string[]) {
-    this.settings.providers.find(p => p.id === id)!.models = models
+  async setModels(id: ProviderId, models: string[], capabilities: Record<string, ModelCapabilities> = {}) {
+    const provider = this.settings.providers.find(p => p.id === id)!
+    provider.models = models
+    provider.modelCapabilities = Object.fromEntries(models.filter(model => capabilities[model] || provider.modelCapabilities?.[model]).map(model => [model, { ...provider.modelCapabilities?.[model], ...capabilities[model] }]))
+    await this.write('settings.json', this.settings)
+  }
+  async setModelCapabilities(id: ProviderId, model: string, capabilities: ModelCapabilities) {
+    const provider = this.settings.providers.find(p => p.id === id)!
+    provider.modelCapabilities = { ...provider.modelCapabilities, [model]: { ...provider.modelCapabilities?.[model], ...capabilities } }
     await this.write('settings.json', this.settings)
   }
   async saveData(data: AppData) {

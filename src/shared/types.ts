@@ -2,6 +2,11 @@ export type ProviderId = 'openai' | 'anthropic' | 'google' | 'xai' | 'custom' | 
 export type Mode = 'chat' | 'code' | 'ask'
 export type PermissionMode = 'read-only' | 'ask' | 'full-access'
 export type ReasoningEffort = 'auto' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+export interface ModelCapabilities {
+  effortLevels?: Exclude<ReasoningEffort, 'auto'>[]
+  defaultEffort?: Exclude<ReasoningEffort, 'auto'>
+  maxOutputTokens?: number
+}
 export type Theme = 'light' | 'dark' | 'system'
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'error' | 'unsupported'
 export interface AppUpdateState {
@@ -17,6 +22,7 @@ export interface ProviderConfig {
   baseURL: string
   hasKey: boolean
   models: string[]
+  modelCapabilities?: Record<string, ModelCapabilities>
 }
 export interface Settings {
   providers: ProviderConfig[]
@@ -88,6 +94,7 @@ export type ChatEvent =
   | { type: 'done'; requestId: string; apiMessages: unknown[]; tokens: number }
   | { type: 'error'; requestId: string; error: string }
   | { type: 'aborted'; requestId: string }
+  | { type: 'model-capabilities'; requestId: string; provider: ProviderId; model: string; capabilities: ModelCapabilities }
 export interface KodaBridge {
   desktop: boolean
   getUpdateState(): Promise<AppUpdateState>
@@ -99,7 +106,7 @@ export interface KodaBridge {
   saveSettings(settings: Partial<Omit<Settings, 'providers'>>): Promise<Settings>
   saveProvider(provider: ProviderId, config: { model: string; baseURL: string; apiKey?: string }): Promise<ProviderConfig>
   removeKey(provider: ProviderId): Promise<ProviderConfig>
-  testProvider(provider: ProviderId): Promise<{ models: string[] }>
+  testProvider(provider: ProviderId): Promise<{ models: string[]; modelCapabilities?: Record<string, ModelCapabilities> }>
   getData(): Promise<AppData>
   saveData(data: AppData): Promise<void>
   openProject(): Promise<Project | null>

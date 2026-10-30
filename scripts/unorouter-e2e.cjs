@@ -11,18 +11,24 @@ async function until(check, message) {
   throw new Error(message)
 }
 const key = 'unorouter-local-test-key'
-const models = ['gpt-6.1-sol', 'claude-haiku-5-5', 'minimax-m3.1-flash:free']
+const models = ['gpt-6.1-sol', 'claude-haiku-5-5', 'minimax-m3.1-flash:free', 'qwen3.8-27b:free', 'claude-fable-5', 'route-changing-model']
 const requests = []
 const server = http.createServer(async (req, res) => {
   if (req.headers.authorization !== `Bearer ${key}`) {
     res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'Invalid API key' } })); return
   }
   if (req.method === 'GET' && req.url === '/v1/models') {
-    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ object: 'list', data: models.map(id => ({ id, object: 'model' })) })); return
+    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ object: 'list', data: models.map(id => ({ id, object: 'model', ...(id === 'route-changing-model' ? { metadata: { reasoningEfforts: ['low', 'medium', 'high'], maxOutputTokens: 32768 } } : {}) })) })); return
   }
   if (req.method !== 'POST' || req.url !== '/v1/chat/completions') { res.writeHead(404); res.end(); return }
   let raw = ''; for await (const chunk of req) raw += chunk
   const body = JSON.parse(raw); requests.push(body)
+  if (body.model === 'route-changing-model' && body.reasoning_effort === 'high') {
+    res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'Unexpected reasoning effort high. Supported types are xhigh (default), and low.' } })); return
+  }
+  if (body.model === 'qwen3.8-27b:free' && !['low', 'medium', 'xhigh'].includes(body.reasoning_effort)) {
+    res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'Unexpected reasoning effort high. Supported types are xhigh (default), medium, and low.' } })); return
+  }
   const lastUser = body.messages.findLastIndex(message => message.role === 'user')
   const user = String(body.messages[lastUser].content)
   const results = body.messages.slice(lastUser + 1).filter(message => message.role === 'tool')
@@ -98,7 +104,7 @@ const server = http.createServer(async (req, res) => {
     await page.getByText('Der API-Key wurde nicht akzeptiert. Prüfe Key und Berechtigungen.', { exact: true }).waitFor()
     await page.locator('#api-key').fill(key)
     await page.getByRole('button', { name: 'Verbindung prüfen', exact: true }).click()
-    await page.getByText('Verbindung steht. 3 Modelle verfügbar.', { exact: true }).waitFor()
+    await page.getByText('Verbindung steht. 6 Modelle verfügbar.', { exact: true }).waitFor()
     await page.locator('.available-model-option').filter({ hasText: 'GPT-6.1 Sol' }).click()
     await page.getByRole('button', { name: 'Speichern', exact: true }).click()
     await page.getByText('Einstellungen gespeichert.', { exact: true }).waitFor()
@@ -122,7 +128,7 @@ const server = http.createServer(async (req, res) => {
 
     await page.locator('.model-button').click()
     await page.locator('.model-group').filter({ hasText: 'UnoRouter' }).getByRole('button', { name: 'GPT-6.1 Sol', exact: true }).click()
-    assert.equal(await page.locator('.effort-button').count(), 0)
+    assert.equal(await page.locator('.effort-button').count(), 1)
     const send = async value => { await page.getByRole('textbox', { name: 'Nachricht an Koda' }).fill(value); await page.getByRole('button', { name: 'Nachricht senden' }).click() }
     const idle = () => until(() => page.getByRole('button', { name: 'Antwort stoppen' }).count().then(count => count === 0), 'UnoRouter chat did not finish')
     await send('Route testen')
@@ -130,8 +136,8 @@ const server = http.createServer(async (req, res) => {
     assert.equal(await page.getByRole('button', { name: 'Antwort stoppen' }).count(), 1)
     await page.getByText('UnoRouter streamt die Antwort erfolgreich.', { exact: true }).waitFor(); await idle()
     assert.equal(requests[0].model, 'gpt-6.1-sol'); assert.equal(requests[0].stream, true)
-    assert.equal(requests[0].tools, undefined); assert.equal(requests[0].reasoning_effort, undefined)
-    console.log('PASS real Chat Completions streaming through UnoRouter adapter with exact model IDs and no unsupported reasoning parameters')
+    assert.equal(requests[0].tools, undefined); assert.equal(requests[0].reasoning_effort, 'max')
+    console.log('PASS real Chat Completions streaming through UnoRouter adapter with exact model IDs and route-specific reasoning parameters')
 
     await page.locator('.new-chat-button').click()
     await page.getByRole('button', { name: 'Code-Modus', exact: true }).click()
@@ -150,6 +156,36 @@ const server = http.createServer(async (req, res) => {
     assert.equal(urls.filter(url => url.endsWith('/chat/completions')).length, 4)
     console.log('PASS fragmented streamed tool calls, read file, approved write and tool-result continuation in Code mode')
 
+    const chooseModel = async name => { await page.locator('.model-button').click(); await page.locator('.model-group').filter({ hasText: 'UnoRouter' }).getByRole('button', { name, exact: true }).click() }
+    const chooseEffort = async name => { await page.locator('.effort-button').click(); await page.getByRole('menuitemradio', { name: name === 'Auto' ? /^Auto/ : name, exact: true }).click() }
+    await page.locator('.new-chat-button').click()
+    await chooseModel('qwen3.8-27b:free')
+    await page.locator('.effort-button').click()
+    assert.equal(await page.locator('.effort-options > button').count(), 4)
+    assert.equal(await page.getByRole('menuitemradio', { name: 'Hoch', exact: true }).count(), 0)
+    await page.getByRole('menuitemradio', { name: 'Mittel', exact: true }).click()
+    await send('Qwen Effort prüfen'); await idle()
+    assert.equal(requests.at(-1).reasoning_effort, 'medium')
+    await chooseEffort('Auto')
+    await send('Qwen Auto prüfen'); await idle()
+    assert.equal(requests.at(-1).reasoning_effort, 'xhigh')
+    assert.ok(requests.at(-1).max_tokens <= 32768)
+    await page.locator('.effort-button').click(); await page.screenshot({ path: 'artifacts/unorouter-qwen-effort.png', animations: 'disabled' }); await page.keyboard.press('Escape')
+    await chooseModel('claude-fable-5'); await chooseEffort('Maximum')
+    await send('Fable Effort prüfen'); await idle()
+    assert.equal(requests.at(-1).reasoning_effort, 'max')
+    await chooseModel('route-changing-model'); await chooseEffort('Hoch')
+    const beforeError = requests.length
+    await send('Routenwechsel prüfen'); await idle()
+    await page.getByText(/Das Effort-Menü wurde aktualisiert/).waitFor()
+    assert.equal(requests.length, beforeError + 1)
+    await page.locator('.effort-button').click()
+    assert.equal(await page.getByRole('menuitemradio', { name: 'Hoch', exact: true }).count(), 0)
+    await page.getByRole('menuitemradio', { name: 'Sehr hoch', exact: true }).click()
+    await send('Korrigierte Route prüfen'); await idle()
+    assert.equal(requests.at(-1).reasoning_effort, 'xhigh')
+    console.log('PASS Qwen and Fable effort UI, valid Auto, output ceiling, learned route levels, retry by user only and correct API parameters')
+
     await until(async () => {
       const saved = JSON.parse(await fs.readFile(path.join(directory, 'workspace.json'), 'utf8'))
       return saved.conversations.some(chat => chat.messages.some(message => message.content === 'Datei über UnoRouter aktualisiert.')) && saved.conversations.some(chat => chat.messages.some(message => message.content === 'UnoRouter streamt die Antwort erfolgreich.'))
@@ -157,10 +193,16 @@ const server = http.createServer(async (req, res) => {
     await app.close(); app = null; await launch()
     const restored = await page.evaluate(() => window.koda.getSettings())
     const uno = restored.providers.find(provider => provider.id === 'unorouter')
-    assert.equal(uno.model, 'gpt-6.1-sol'); assert.equal(uno.hasKey, true); assert.equal(uno.models.length, 3)
+    assert.equal(uno.model, 'gpt-6.1-sol'); assert.equal(uno.hasKey, true); assert.equal(uno.models.length, 6)
     await page.locator('.recent-chat').filter({ hasText: 'Route testen' }).click()
     await page.getByText('UnoRouter streamt die Antwort erfolgreich.', { exact: true }).waitFor()
     await send('Nach Neustart'); await idle()
+    assert.deepEqual(uno.modelCapabilities['route-changing-model'].effortLevels, ['low', 'xhigh'])
+    await page.evaluate(async apiKey => { await window.koda.saveProvider('custom', { model: 'qwen3.8-27b:free', baseURL: 'https://api.unorouter.com/v1', apiKey }) }, key)
+    await page.reload(); await page.locator('.welcome h1').waitFor()
+    await chooseEffort('Mittel'); await send('UnoRouter unter Eigener prüfen'); await idle()
+    assert.equal(requests.at(-1).reasoning_effort, 'medium')
+    console.log('PASS UnoRouter effort through Eigener Anbieter and learned capabilities after native restart')
     await page.locator('.sidebar-settings').click(); await page.getByRole('tab', { name: 'UnoRouter', exact: true }).click()
     await page.getByRole('button', { name: 'API-Key entfernen', exact: true }).click()
     await page.getByRole('button', { name: 'Entfernen', exact: true }).click()

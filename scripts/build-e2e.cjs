@@ -123,7 +123,7 @@ setTimeout(()=>{try{
     assert.equal(compiled.readUInt16BE(6), javaVersion + 44)
     assert.equal(await page.locator('.build-artifact strong').innerText(), 'NativePlugin.jar')
     await page.getByRole('button', { name: 'Im Ordner anzeigen', exact: true }).click()
-    assert.equal(await app.evaluate(() => global.__revealedArtifact), path.join(project, 'build/libs/NativePlugin.jar'))
+    assert.equal(await app.evaluate(() => global.__revealedArtifact), await fs.realpath(path.join(project, 'build/libs/NativePlugin.jar')))
     await fs.mkdir('artifacts', { recursive: true })
     await page.screenshot({ path: 'artifacts/build-result.png', animations: 'disabled' })
     await page.evaluate(async () => {

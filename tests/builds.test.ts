@@ -86,6 +86,25 @@ test('managed tools verify the official checksum, install atomically and reuse t
   assert.equal(requests, 2)
   assert.deepEqual(await fs.readdir(path.join(root, '.work')), [])
 })
+test('managed tools reuse their cache through an ancestor directory junction', async t => {
+  const root = await temporary(t)
+  const actual = path.join(root, 'actual'), alias = path.join(root, 'alias')
+  await fs.mkdir(actual)
+  await fs.symlink(actual, alias, process.platform === 'win32' ? 'junction' : 'dir')
+  const bytes = await zip({ 'apache-maven-3.10.0/bin/mvn.cmd': '@echo off\r\necho test' })
+  const checksum = createHash('sha512').update(bytes).digest('hex')
+  let requests = 0
+  const manager = new Toolchains(alias, { environment: {}, fetch: (async input => {
+    requests++
+    if (requests > 2) throw new Error('The cached tool must be usable offline')
+    return String(input).endsWith('.sha512') ? new Response(checksum) : new Response(new Uint8Array(bytes))
+  }) as typeof fetch })
+  const home = await manager.buildTool('maven', '3.10.0', new AbortController().signal, () => {})
+  assert.notEqual(await fs.realpath(home), home)
+  assert.equal(await manager.buildTool('maven', '3.10.0', new AbortController().signal, () => {}), home)
+  assert.equal(requests, 2)
+})
+
 test('bad downloads and unsafe redirects never become executable tools', async t => {
   const root = await temporary(t)
   const bytes = await zip({ 'apache-maven-3.10.0/bin/mvn.cmd': '@echo off' })

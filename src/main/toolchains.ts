@@ -58,9 +58,12 @@ export class Toolchains {
       if ((await fs.lstat(target)).isSymbolicLink()) throw new Error('Der Werkzeugordner darf kein Dateiverweis sein.')
       const marker = JSON.parse(await fs.readFile(path.join(target, 'koda-tool.json'), 'utf8'))
       const home = insidePath(target, marker.home)
-      insidePath(target, path.relative(target, await fs.realpath(home)))
+      // Ancestor folders may be junctions on Windows (including hosted CI
+      // temp folders). Compare canonical paths on both sides of the boundary.
+      const realTarget = await fs.realpath(target)
+      insidePath(realTarget, path.relative(realTarget, await fs.realpath(home)))
       const file = path.join(home, executable)
-      insidePath(target, path.relative(target, await fs.realpath(file)))
+      insidePath(realTarget, path.relative(realTarget, await fs.realpath(file)))
       if ((await fs.stat(file)).isFile() && (!key.startsWith('jdk-') || (await fs.stat(path.join(home, 'bin/javac.exe'))).isFile())) return home
     } catch (error) { if ((error as Error).message.includes('Dateiverweis')) throw error }
     return undefined

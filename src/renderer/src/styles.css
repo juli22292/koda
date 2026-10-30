@@ -366,6 +366,15 @@ kbd { font: inherit; color: var(--muted); font-size: 10px; }
 .command-console-heading > span:last-child { margin-left: auto; }
 .command-console .command-preview { margin: 0; border: 0; border-radius: 0; padding: 11px 12px; background: transparent; color: var(--text); font-size: 11px; line-height: 1.7; }
 .terminal-prompt { color: var(--accent); user-select: none; }
+.build-artifacts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 5px; }
+.build-artifact { display: flex; align-items: center; gap: 11px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--soft); }
+.build-artifact > svg { color: var(--accent); }
+.build-artifact > span { flex: 1; min-width: 0; }
+.build-artifact strong { display: block; font-size: 12px; font-weight: 550; overflow-wrap: anywhere; }
+.build-artifact small { display: block; font-size: 10px; color: var(--muted); margin-top: 5px; }
+.build-artifact code { display: block; font-size: 10px; color: var(--secondary); margin-top: 5px; overflow-wrap: anywhere; }
+.build-artifact > button { flex-shrink: 0; }
+@media (max-width: 1100px) { .build-artifact { flex-wrap: wrap; }.build-artifact > button { margin-left: auto; } }
 .command-console .terminal-output { padding: 0 12px 13px; margin: 0; border: 0; border-radius: 0; font-size: 11px; line-height: 1.7; color: var(--secondary); background: transparent; max-height: 250px; }
 .terminal-cursor { display: inline-block; width: 6px; height: 12px; background: var(--accent); vertical-align: -2px; margin-left: 5px; animation: terminal-blink 1s step-end infinite; }
 @keyframes command-progress { from { transform: translateX(-100%); } to { transform: translateX(390%); } }

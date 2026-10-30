@@ -5,17 +5,18 @@ interface CommandOptions {
   signal: AbortSignal
   onOutput(output: string): void
   timeoutMs?: number
+  env?: NodeJS.ProcessEnv
 }
 
 // Stream a bounded tail of both output channels. The whole process tree is
 // stopped on cancellation so commands spawned by PowerShell do not keep running.
-export function runCommand(command: string, { cwd, signal, onOutput, timeoutMs = 90_000 }: CommandOptions): Promise<string> {
+export function runCommand(command: string, { cwd, signal, onOutput, timeoutMs = 90_000, env }: CommandOptions): Promise<string> {
   if (signal.aborted) return Promise.reject(new Error('Befehl abgebrochen.'))
   return new Promise((resolve, reject) => {
     const windows = process.platform === 'win32'
     const shellCommand = windows ? '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding; ' + command : command
     const child = spawn(windows ? 'powershell.exe' : '/bin/sh', windows ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', shellCommand] : ['-c', shellCommand], {
-      cwd, windowsHide: true, detached: !windows, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd, env: env ? { ...process.env, ...env } : process.env, windowsHide: true, detached: !windows, stdio: ['ignore', 'pipe', 'pipe'],
     })
     let output = '', settled = false, timedOut = false, lastEmit = 0
     let pending: ReturnType<typeof setTimeout> | undefined

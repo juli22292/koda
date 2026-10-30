@@ -28,6 +28,7 @@ function git(...args) { return execFileSync('git', args, { encoding: 'utf8', win
   npm(['run', 'dist'])
   npm(['run', 'test:e2e'], { ...process.env, KODA_TEST_EXE: path.resolve('release/win-unpacked/Koda.exe') })
   npm(['run', 'test:agent'], { ...process.env, KODA_TEST_EXE: path.resolve('release/win-unpacked/Koda.exe') })
+  npm(['run', 'test:builds'], { ...process.env, KODA_TEST_EXE: path.resolve('release/win-unpacked/Koda.exe') })
   npm(['run', 'test:updates'])
   command('git', ['add', 'package.json', 'package-lock.json'])
   command('git', ['commit', '-m', `Release Koda ${version}`])

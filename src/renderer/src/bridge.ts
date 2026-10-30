@@ -19,7 +19,7 @@ const preview: KodaBridge = {
   saveProvider: previewOnly, removeKey: previewOnly, testProvider: previewOnly,
   getData: async () => read<AppData>('koda-preview-data', { projects: [], conversations: [] }),
   saveData: async data => { localStorage.setItem('koda-preview-data', JSON.stringify(data)) },
-  openProject: previewOnly, listFiles: previewOnly, readFile: previewOnly, pickFiles: previewOnly,
+  openProject: previewOnly, listFiles: previewOnly, readFile: previewOnly, revealArtifact: previewOnly, pickFiles: previewOnly,
   startChat: previewOnly, stopChat: previewOnly, approveTool: previewOnly,
   onChatEvent: () => () => {}, windowAction: () => {},
   openExternal: async url => { if (/^https?:\/\//.test(url)) window.open(url, '_blank', 'noopener,noreferrer') },

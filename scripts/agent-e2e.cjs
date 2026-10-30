@@ -99,7 +99,7 @@ const server = http.createServer(async (req, res) => {
     await page.getByRole('button', { name: 'Nachricht senden' }).click()
     await page.getByText('Nur lesend geprüft.', { exact: true }).waitFor()
     await until(() => page.getByRole('button', { name: 'Antwort stoppen' }).count().then(count => count === 0), 'Read-only run did not finish')
-    assert.deepEqual(requests.at(-1).tools.map(tool => tool.function.name).sort(), ['list_files', 'read_file'])
+    assert.deepEqual(requests.at(-1).tools.map(tool => tool.function.name).sort(), ['inspect_build', 'list_files', 'read_file'])
     console.log('PASS read-only permissions remove write and shell tools in Code mode')
 
     await page.locator('.project-item').click()

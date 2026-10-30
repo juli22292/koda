@@ -3,9 +3,10 @@ import path from 'node:path'
 import { promises as fs } from 'node:fs'
 import { Store } from './store'
 import { Agent, fetchModels } from './agent'
-import { listWorkspaceFiles, readWorkspaceFile, isSensitive } from './workspace'
+import { listWorkspaceFiles, readWorkspaceFile, isSensitive, workspacePath } from './workspace'
 import electronUpdater from 'electron-updater'
 import { UpdateManager } from './updates'
+import { Builds } from './builds'
 import type { ChatRequest, ProviderId } from '../shared/types'
 
 app.setName('Koda')
@@ -55,6 +56,12 @@ function registerIPC() {
   })
   handle('project:list', (id, relativePath) => listWorkspaceFiles(projectPath(id), relativePath))
   handle('project:read', (id, relativePath) => readWorkspaceFile(projectPath(id), relativePath))
+  handle('artifact:reveal', async (id: string, relativePath: string) => {
+    if (typeof relativePath !== 'string' || !relativePath.toLowerCase().endsWith('.jar')) throw new Error('Bitte eine gebaute JAR-Datei auswählen.')
+    const file = await workspacePath(projectPath(id), relativePath)
+    if (!(await fs.stat(file)).isFile()) throw new Error('Die JAR-Datei ist nicht mehr vorhanden.')
+    shell.showItemInFolder(file)
+  })
   handle('files:pick', async () => {
     const selected = await dialog.showOpenDialog(window, { title: 'Textdateien als Kontext hinzufügen', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Code & Text', extensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'md', 'txt', 'py', 'css', 'html', 'rs', 'go', 'yaml', 'yml', 'toml', 'csv', 'sql', 'sh', 'vue', 'svelte', 'c', 'cpp', 'java'] }] })
     if (selected.canceled) return []
@@ -96,7 +103,7 @@ async function createWindow() {
     icon: nativeImage.createFromPath(path.join(__dirname, '../../resources/icon.png')),
     webPreferences: { preload: path.join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: false },
   })
-  agent = new Agent(store, event => { if (!window.isDestroyed()) window.webContents.send('chat:event', event) })
+  agent = new Agent(store, event => { if (!window.isDestroyed()) window.webContents.send('chat:event', event) }, new Builds(path.join(app.getPath('userData'), 'tools')))
   updates = new UpdateManager(electronUpdater.autoUpdater, {
     enabled: app.isPackaged && process.platform === 'win32' && !process.env.PORTABLE_EXECUTABLE_DIR,
     currentVersion: app.getVersion(),

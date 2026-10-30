@@ -7,7 +7,8 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { z } from 'zod'
 import { runCommand } from './commands'
 import { permissionPolicy } from '../shared/permissions'
-import type { ChatEvent, ChatRequest, ToolActivity, ProviderConfig } from '../shared/types'
+import type { BuildResult, ChatEvent, ChatRequest, ToolActivity, ProviderConfig } from '../shared/types'
+import type { Builds } from './builds'
 import { listWorkspaceFiles, readWorkspaceFile, writeWorkspaceFile, workspacePath } from './workspace'
 import type { Store } from './store'
 
@@ -38,7 +39,7 @@ interface Run { controller: AbortController; approvals: Map<string, (approved: b
 export class Agent {
   private runs = new Map<string, Run>()
   get isRunning() { return this.runs.size > 0 }
-  constructor(private store: Store, private emit: (event: ChatEvent) => void) {}
+  constructor(private store: Store, private emit: (event: ChatEvent) => void, private builds: Builds) {}
   stop(requestId: string) {
     const run = this.runs.get(requestId)
     if (!run) return
@@ -66,7 +67,7 @@ export class Agent {
     const run: Run = { controller, approvals: new Map() }
     this.runs.set(request.requestId, run)
     const emit = (event: Omit<Extract<ChatEvent, { type: 'tool' }>, 'requestId'>) => this.emit({ ...event, requestId: request.requestId })
-    const activity = async (name: string, input: Record<string, unknown>, execute: (progress: (output: string) => void) => Promise<string>, requiresApproval = false, before?: string) => {
+    const activity = async (name: string, input: Record<string, unknown>, execute: (progress: (output: string) => void) => Promise<string | BuildResult>, requiresApproval = false, before?: string) => {
       const id = crypto.randomUUID()
       const approval = requiresApproval && policy.needsApproval
       const item: ToolActivity = { id, name, input, status: approval ? 'approval' : 'running', before, automatic: requiresApproval && !policy.needsApproval }
@@ -85,12 +86,13 @@ export class Agent {
       let latestOutput: string | undefined
       emit({ type: 'tool', tool: running })
       try {
-        const output = await execute(output => {
+        const result = await execute(output => {
           latestOutput = output
           if (!controller.signal.aborted) emit({ type: 'tool', tool: { ...running, output } })
         })
-        emit({ type: 'tool', tool: { ...running, status: 'done', output, finishedAt: Date.now() } })
-        return output
+        const output = typeof result === 'string' ? result : result.output
+        emit({ type: 'tool', tool: { ...running, status: 'done', output, artifacts: typeof result === 'string' ? undefined : result.artifacts, finishedAt: Date.now() } })
+        return typeof result === 'string' ? output : JSON.stringify({ success: true, ...result })
       } catch (error) {
         const output = error instanceof Error ? error.message : 'Aktion fehlgeschlagen.'
         emit({ type: 'tool', tool: { ...running, status: controller.signal.aborted ? 'cancelled' : 'error', output: controller.signal.aborted ? latestOutput : output, finishedAt: Date.now() } })
@@ -100,7 +102,12 @@ export class Agent {
     const tools = project && policy.canRead ? {
       list_files: tool({ description: 'List files and directories in the project. Use relative paths.', inputSchema: z.object({ path: z.string().describe('Relative directory, e.g. . or src') }), execute: ({ path }) => activity('list_files', { path }, async () => JSON.stringify(await listWorkspaceFiles(project.path, path))) }),
       read_file: tool({ description: 'Read a UTF-8 file in the project. Credentials are protected.', inputSchema: z.object({ path: z.string() }), execute: ({ path }) => activity('read_file', { path }, () => readWorkspaceFile(project.path, path)) }),
+      inspect_build: tool({ description: 'Inspect a Java/Minecraft plugin project without executing it. Detect Maven/Gradle, wrapper versions, Java compiler and runtime versions. Use before compiling. path is relative to the selected project.', inputSchema: z.object({ path: z.string().default('.'), system: z.enum(['maven', 'gradle']).optional() }), execute: options => activity('inspect_build', options, async () => JSON.stringify(await this.builds.inspect(project.path, options))) }),
       ...(policy.canWrite ? {
+        build_project: tool({ description: `Compile a Maven or Gradle Java/Minecraft project with the appropriate JDK and build tool. Missing tools are downloaded and checksum-verified in Koda's tool directory. Prefer project wrappers. Stream build output and return real JAR paths. ${policy.needsApproval ? 'Requires approval before installing tools or executing the build.' : 'Tool setup and builds are preapproved for this chat.'} Only use when the user requests compilation/building. Fix build errors using file tools, then retry; never claim a JAR exists without returned artifacts.`, inputSchema: z.object({ path: z.string().default('.'), system: z.enum(['maven', 'gradle']).optional(), javaVersion: z.number().int().min(8).max(30).optional().describe('Override only when the requested Java target cannot be detected from the project.'), runtimeJavaVersion: z.number().int().min(8).max(30).optional().describe('Use a separate JVM for build-tool/plugins requiring newer Java, preserving the compiler target. Usually detected automatically.'), task: z.string().optional().describe('Local build target, e.g. package, build, shadowJar or reobfJar. Omit for the default.') }), execute: async options => {
+          const plan = await this.builds.inspect(project.path, options)
+          return activity('build_project', { path: plan.path, command: plan.command, system: plan.system, buildVersion: plan.version, javaVersion: plan.javaVersion, runtimeJava: plan.runtimeJava, explanation: `Projekt kompilieren mit ${plan.system === 'maven' ? 'Maven' : 'Gradle'} ${plan.version} und Java ${plan.javaVersion}${plan.runtimeJava !== plan.javaVersion ? ` (Build-Laufzeit Java ${plan.runtimeJava})` : ''}. Fehlende Werkzeuge werden im Koda-Ordner eingerichtet.` }, onOutput => this.builds.run(project.path, plan, controller.signal, onOutput), true)
+        } }),
         write_file: tool({ description: `Create or replace a project file. Read existing files first. ${policy.needsApproval ? 'The user must approve the exact change.' : 'File changes are preapproved for this chat.'}`, inputSchema: z.object({ path: z.string(), content: z.string().describe('Full new file content') }), execute: async ({ path, content }) => {
           await workspacePath(project.path, path, true)
           const before = await readWorkspaceFile(project.path, path).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ''; throw error })
@@ -118,7 +125,7 @@ export class Agent {
     try {
       const result = streamText({
         model: createModel({ ...config, model: request.model }, key),
-        system: `You are Koda, a precise and capable ${request.mode === 'chat' ? 'conversational assistant' : 'coding partner'} in a local desktop app. Reply in the user's language, German by default. Keep explanations clear and practical. Use Markdown. Never claim you ran commands or changed files unless tools confirm it. ${request.mode === 'chat' ? 'Help with questions, writing, ideas, analysis and everyday tasks. You are in Chat mode with no access to local file tools or shell commands. You can use files explicitly attached to the conversation. Do not ask for a project folder unless the user wants to work on local code.' : project ? `The selected project is ${project.name}. All file paths must be relative to its root. Start by inspecting relevant files. Do not access credentials or secrets. ${policy.needsApproval ? "File changes and commands require the user's approval." : 'Full access is enabled for this chat: file changes and commands are preapproved and may be executed without asking again, with the OS user permissions.'} If an action is denied, respect the decision. ${!policy.canWrite ? 'You are in read-only mode. Explain and inspect; do not change files or run commands.' : 'Implement complete, working changes. Read before editing, preserve existing work, and verify when appropriate.'}` : 'No project folder is selected. You can discuss code and produce code snippets. Ask the user to open a folder when local files are needed.'}\n${settings.systemPrompt}`,
+        system: `You are Koda, a precise and capable ${request.mode === 'chat' ? 'conversational assistant' : 'coding partner'} in a local desktop app. Reply in the user's language, German by default. Keep explanations clear and practical. Use Markdown. Never claim you ran commands or changed files unless tools confirm it. ${request.mode === 'chat' ? 'Help with questions, writing, ideas, analysis and everyday tasks. You are in Chat mode with no access to local file tools or shell commands. You can use files explicitly attached to the conversation. Do not ask for a project folder unless the user wants to work on local code.' : project ? `The selected project is ${project.name}. All file paths must be relative to its root. Start by inspecting relevant files. Do not access credentials or secrets. ${policy.needsApproval ? "File changes and commands require the user's approval." : 'Full access is enabled for this chat: file changes and commands are preapproved and may be executed without asking again, with the OS user permissions.'} If an action is denied, respect the decision. ${!policy.canWrite ? 'You are in read-only mode. Explain and inspect; do not change files or run commands.' : 'Implement complete, working changes. Read before editing, preserve existing work, and verify when appropriate. When the user asks to compile/package/build a Java or Minecraft plugin project, inspect_build and then build_project are the preferred tools. They select the appropriate Java runtime/compiler and provision missing tools automatically. For a new plugin, create complete Maven/Gradle build files, the appropriate Minecraft API dependency with provided/compileOnly scope, explicit Java compatibility and plugin metadata before building. Respect existing wrappers and versions. Fix build failures from the returned log and retry with the same permissions. Only report success after a successful build, and only cite JAR paths returned as artifacts. If no JAR was returned, inspect the packaging or task; never invent an artifact or silently skip the requested build. Do not execute build tools when compilation was not requested.'}` : 'No project folder is selected. You can discuss code and produce code snippets. Ask the user to open a folder when local files are needed.'}\n${settings.systemPrompt}`,
         messages,
         tools,
         stopWhen: stepCountIs(20),

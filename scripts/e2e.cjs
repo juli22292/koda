@@ -184,7 +184,7 @@ const server = http.createServer(async (req, res) => {
     await page.getByRole('button', { name: 'Nachricht senden' }).click()
     await page.getByText('Im Fragen-Modus lese ich dein Projekt, ohne Änderungen vorzunehmen.', { exact: false }).waitFor()
     await until(() => page.locator('.run-status').count().then(count => count === 0), 'Ask run did not finish')
-    assert.deepEqual(requests.at(-1).tools.map(tool => tool.function.name).sort(), ['list_files', 'read_file'])
+    assert.deepEqual(requests.at(-1).tools.map(tool => tool.function.name).sort(), ['inspect_build', 'list_files', 'read_file'])
     console.log('PASS ask mode exposes only read tools')
 
     await page.getByRole('textbox', { name: 'Nachricht an Koda' }).fill('__slow__')

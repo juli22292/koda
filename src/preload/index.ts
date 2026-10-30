@@ -22,6 +22,7 @@ const bridge: KodaBridge = {
   openProject: () => ipcRenderer.invoke('project:open'),
   listFiles: (id, path) => ipcRenderer.invoke('project:list', id, path),
   readFile: (id, path) => ipcRenderer.invoke('project:read', id, path),
+  revealArtifact: (id, path) => ipcRenderer.invoke('artifact:reveal', id, path),
   pickFiles: () => ipcRenderer.invoke('files:pick'),
   startChat: request => ipcRenderer.invoke('chat:start', request),
   stopChat: requestId => ipcRenderer.invoke('chat:stop', requestId),

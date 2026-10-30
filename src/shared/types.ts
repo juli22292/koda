@@ -26,6 +26,8 @@ export interface Settings {
 }
 export interface Project { id: string; name: string; path: string; lastOpened: number }
 export interface Attachment { name: string; content: string; path?: string }
+export interface BuildArtifact { name: string; path: string; size: number; kind: 'plugin' | 'jar' }
+export interface BuildResult { output: string; artifacts: BuildArtifact[] }
 export interface ToolActivity {
   id: string
   name: string
@@ -36,6 +38,7 @@ export interface ToolActivity {
   startedAt?: number
   finishedAt?: number
   automatic?: boolean
+  artifacts?: BuildArtifact[]
 }
 export interface Message {
   id: string
@@ -97,6 +100,7 @@ export interface KodaBridge {
   openProject(): Promise<Project | null>
   listFiles(projectId: string, relativePath?: string): Promise<FileEntry[]>
   readFile(projectId: string, relativePath: string): Promise<string>
+  revealArtifact(projectId: string, relativePath: string): Promise<void>
   pickFiles(): Promise<Attachment[]>
   startChat(request: ChatRequest): Promise<void>
   stopChat(requestId: string): Promise<void>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Check, ChevronDown, Code2, Folder, MessageSquare, Paperclip, Plus, Settings2, ShieldCheck, Square, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, Code2, Folder, MessageSquare, Paperclip, Plus, Settings2, Square, X } from 'lucide-react'
 import type { Attachment, Mode, Project, ProviderId, Settings } from '../../../shared/types'
 import { isConfigured, modelLabel, PROVIDERS } from '../../../shared/providers'
 import { ProviderIcon } from './Brand'
@@ -39,6 +39,5 @@ export function Composer(props: Props) {
         if (!available && query && !p.name.toLowerCase().includes(query.toLowerCase())) return null
         return <div className="model-group" key={p.id}><span className="model-group-label"><ProviderIcon id={p.id} size={19}/>{p.name}{!available && <small>API-Key fehlt</small>}</span>{available ? models.slice(0, query ? 100 : 20).map(m => <button key={m} className={provider === p.id && model === m ? 'selected' : ''} onClick={() => { props.onSelectModel(p.id, m); setModelMenu(false) }}><span>{modelLabel(m)}</span>{provider === p.id && model === m && <Check size={13}/>}</button>) : <button className="connect-provider" onClick={() => { setModelMenu(false); props.onSettings(p.id) }}>Verbinden <span>+</span></button>}</div>
       })}</div><button className="model-menu-footer" onClick={() => { setModelMenu(false); props.onSettings() }}><Plus size={13}/> Anbieter verwalten</button></div>}</div><button className={`send-button ${busy ? 'stop' : ''}`} aria-label={busy ? 'Antwort stoppen' : 'Nachricht senden'} title={busy ? 'Antwort stoppen' : 'Senden · Enter'} disabled={!busy && !draft.trim()} onClick={busy ? props.onStop : props.onSend}>{busy ? <Square size={14} fill="currentColor"/> : <ArrowUp size={19}/>}</button></div></div>
-    <div className="composer-under"><span><ShieldCheck size={12}/>{mode === 'code' ? 'Änderungen werden von dir bestätigt' : 'Lesezugriff auf dein Projekt'}</span><span><kbd>↵</kbd> senden <i>·</i><kbd>⇧ ↵</kbd> neue Zeile</span></div>
   </div>
 }

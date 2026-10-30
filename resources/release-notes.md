@@ -1,14 +1,12 @@
-## Koda für Windows
+## Koda 0.2.1
 
-- Windows-Installer mit dem Installationsordner **KodaApp**.
-- Automatische Update-Prüfung beim Start und alle vier Stunden.
-- Update-Symbol links neben „Minimieren“: herunterladen, Fortschritt sehen und anschließend neu starten.
-- Laufende Antworten verhindern einen Update-Neustart.
-- Einstellungen, eigene API-Keys, Chats und der aktuelle Entwurf bleiben bei Updates erhalten.
-- Eine Ladeanzeige im Chat und direkt sichtbare Modelllisten nach dem Verbindungstest.
+- Die Hinweiszeile mit „senden“, „neue Zeile“ und „Änderungen werden von dir bestätigt“ wurde vollständig entfernt.
+- Auch die zusätzliche Fußzeile unter dem Chat-Eingabefeld entfällt.
+- In der Seitenleiste steht unter „Dein Workspace“ kein Hinweis „Lokal auf diesem Gerät“ mehr.
+- Tastaturbedienung und die Freigabe von Änderungen funktionieren weiterhin wie bisher.
 
 ### Installation
 
-Die Datei **Koda-Setup-…-x64.exe** herunterladen und starten. Bereits vorhandene portable Versionen vor dem Start der installierten App schließen. Die bisher gespeicherten Einstellungen werden weiterverwendet.
+In einer bereits installierten Version unter **Einstellungen → Über Koda → Nach Updates suchen** prüfen und anschließend das Update-Symbol links neben „Minimieren“ verwenden. Alternativ die Datei **Koda-Setup-0.2.1-x64.exe** herunterladen und starten. Einstellungen, eigene API-Keys und Chats bleiben erhalten.
 
 Der Installer ist derzeit nicht mit einem Windows-Herausgeberzertifikat signiert.
